@@ -9,7 +9,7 @@ target_include_directories(regex_engine PUBLIC
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
 )
 
-add_executable(regex_app main.cpp)
-target_link_libraries(regex_app PRIVATE regex_engine)
+add_executable(res main.cpp)
+target_link_libraries(res PRIVATE regex_engine)
 
 add_subdirectory(tests)
