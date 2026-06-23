@@ -1,0 +1,99 @@
+#include "regex_engine.hpp"
+
+std::string parseSet(const std::string& pattern, int& i) {
+    std::string chars;
+    while (i < pattern.size() && pattern[i] != ']') {
+        char c = pattern[i++];
+        // кейс "[a-z]"
+        if (i + 1 < pattern.size() && pattern[i] == '-' && pattern[i + 1] != ']') {
+            char to = pattern[i + 1];
+            i += 2;
+            for (char ch = c; ch <= to; ++ch)
+                chars += ch;
+        } else {
+            chars += c;
+        }
+    }
+    if (i < pattern.size()) ++i; // skip ']'
+
+    return chars;
+}
+
+Regex::Regex(const std::string& pattern) {
+    int i = 0;
+    while (i < pattern.size()) {
+        std::unique_ptr<Atom> atom;
+
+        if (pattern[i] == '[') {
+            ++i; // skip '['
+            atom = std::make_unique<SetAtom>(parseSet(pattern, i));
+        } else if (pattern[i] == '.') {
+            atom = std::make_unique<AnyAtom>();
+            ++i;
+        } else {
+            atom = std::make_unique<LiteralAtom>(pattern[i]);
+            ++i;
+        }
+
+        Quantifier quant = Quantifier::Once;
+        if (i < pattern.size()) {
+            if (pattern[i] == '*') { 
+                quant = Quantifier::Star; 
+                ++i; 
+            } else if (pattern[i] == '+') { 
+                quant = Quantifier::Plus;     
+                ++i; 
+            } else if (pattern[i] == '?') { 
+                quant = Quantifier::Question; 
+                ++i; 
+            }
+        }
+
+        tokens.push_back({std::move(atom), quant});
+    }
+}
+
+bool Regex::matchFrom(int tokIdx, const std::string& text, int textIdx) {
+    if (tokIdx == tokens.size()) {
+        return textIdx == text.size();
+    }
+
+    Token& tok = tokens[tokIdx];
+    Atom& atom = *tok.atom;
+
+    // tok.quant == "."
+    if (tok.quant == Quantifier::Once) {
+        if (textIdx >= text.size() || !atom.matches(text[textIdx])) {
+            return false;
+        }
+        
+        return matchFrom(tokIdx + 1, text, textIdx + 1);
+    } else if (tok.quant == Quantifier::Star || tok.quant == Quantifier::Plus) {
+        // * и + жадные моды: подсчет сколько символов в тексте подходит подряд
+        int count = 0;
+        while (textIdx + count < text.size() && atom.matches(text[textIdx + count])) {
+            ++count;
+        }
+
+        if (tok.quant == Quantifier::Plus && count == 0) {
+            return false;
+        }
+
+        return matchFrom(tokIdx + 1, text, textIdx + count);
+    } else { // Quantifier::Question - ленивый мод
+        // попытка взять 0 символов
+        if (matchFrom(tokIdx + 1, text, textIdx)) {
+            return true;
+        }
+        // 2 вариант - 1 символ
+        if (textIdx < text.size() && atom.matches(text[textIdx])) {
+            return matchFrom(tokIdx + 1, text, textIdx + 1);
+        }
+
+        return false;
+    }
+}
+
+bool Regex::match(const std::string& text) {
+    return matchFrom(0, text, 0);
+}
