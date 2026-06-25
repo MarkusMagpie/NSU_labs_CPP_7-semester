@@ -19,6 +19,8 @@ std::string parseSet(const std::string& pattern, int& i) {
     return chars;
 }
 
+
+
 Regex::Regex(const std::string& pattern) {
     int i = 0;
     while (i < pattern.size()) {
@@ -26,7 +28,7 @@ Regex::Regex(const std::string& pattern) {
 
         if (pattern[i] == '[') {
             ++i; // skip '['
-            atom = std::make_unique<SetAtom>(parseSet(pattern, i));
+            atom = std::make_unique<GroupAtom>(parseSet(pattern, i));
         } else if (pattern[i] == '.') {
             atom = std::make_unique<AnyAtom>();
             ++i;
@@ -35,21 +37,21 @@ Regex::Regex(const std::string& pattern) {
             ++i;
         }
 
-        Quantifier quant = Quantifier::Once;
+        Modifier mod = Modifier::Once;
         if (i < pattern.size()) {
             if (pattern[i] == '*') { 
-                quant = Quantifier::Star; 
+                mod = Modifier::Star; 
                 ++i; 
             } else if (pattern[i] == '+') { 
-                quant = Quantifier::Plus;     
+                mod = Modifier::Plus;     
                 ++i; 
             } else if (pattern[i] == '?') { 
-                quant = Quantifier::Question; 
+                mod = Modifier::Question; 
                 ++i; 
             }
         }
 
-        tokens.push_back({std::move(atom), quant});
+        tokens.push_back({std::move(atom), mod});
     }
 }
 
@@ -61,26 +63,26 @@ bool Regex::matchFrom(int tokIdx, const std::string& text, int textIdx) {
     Token& tok = tokens[tokIdx];
     Atom& atom = *tok.atom;
 
-    // tok.quant == "."
-    if (tok.quant == Quantifier::Once) {
+    // tok.mod == "."
+    if (tok.mod == Modifier::Once) {
         if (textIdx >= text.size() || !atom.matches(text[textIdx])) {
             return false;
         }
         
         return matchFrom(tokIdx + 1, text, textIdx + 1);
-    } else if (tok.quant == Quantifier::Star || tok.quant == Quantifier::Plus) {
+    } else if (tok.mod == Modifier::Star || tok.mod == Modifier::Plus) {
         // * и + жадные моды: подсчет сколько символов в тексте подходит подряд
         int count = 0;
         while (textIdx + count < text.size() && atom.matches(text[textIdx + count])) {
             ++count;
         }
 
-        if (tok.quant == Quantifier::Plus && count == 0) {
+        if (tok.mod == Modifier::Plus && count == 0) {
             return false;
         }
 
         return matchFrom(tokIdx + 1, text, textIdx + count);
-    } else { // Quantifier::Question - ленивый мод
+    } else { // Modifier::Question 
         // попытка взять 0 символов
         if (matchFrom(tokIdx + 1, text, textIdx)) {
             return true;

@@ -46,3 +46,5 @@ git submodule add https://github.com/catchorg/Catch2.git tests/catch2
 rm -rf build && mkdir build && cd build
 cmake ..
 cmake --build . --parallel 8
+cd tests && ./tests --order decl -s
+альтернатива через cmake утилиту ctest: ctest --test-dir .

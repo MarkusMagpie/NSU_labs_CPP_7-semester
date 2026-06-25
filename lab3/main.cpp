@@ -4,7 +4,7 @@
 
 int main() {
     std::string patrn;
-    std::cout << "Пожалуйста введите шаблон регулярного выражения: ";
+    std::cout << "Введите шаблон регулярного выражения: ";
     std::getline(std::cin, patrn);
 
     Regex regex(patrn);

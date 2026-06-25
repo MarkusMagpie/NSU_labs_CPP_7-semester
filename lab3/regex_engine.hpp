@@ -26,17 +26,17 @@ public:
 };
 
 // группа символов: "[abc]"", "[a-z]
-class SetAtom : public Atom {
+class GroupAtom : public Atom {
 private:
     std::string chars;
 public:
-    SetAtom(std::string chars2) : chars(chars2) {}
+    GroupAtom(std::string chars2) : chars(chars2) {}
     bool matches(char c) const override {
         return chars.find(c) != std::string::npos;
     }
 };
 
-enum Quantifier { 
+enum Modifier { 
     Once, 
     Star, 
     Plus, 
@@ -45,7 +45,7 @@ enum Quantifier {
 
 struct Token {
     std::unique_ptr<Atom> atom;
-    Quantifier quant;
+    Modifier mod;
 };
 
 class Regex {
