@@ -52,8 +52,18 @@ Regex::Regex(const std::string& pattern) {
         }
 
         tokens.push_back({std::move(atom), mod});
+        // Token лежат в std::vector. Когда вектор очищается (Regex уничтожается), то все Token в нем удаляются,
+        // а вместе с ними и unique_ptr внутри каждого токена автоматически вызывает delete на свой Atom
+        // это аргумент в пользу unique_ptr, иначе бы пришлось писать деструктор.
+        // а от меня в рамках задачи требуют "управление динамической памятью вручную" - unique_ptr автоматизирует эту задачу.
     }
 }
+
+// Regex::~Regex() {
+//     for (Token& tok : tokens) {
+//         delete tok.atom;
+//     }
+// }
 
 bool Regex::matchFrom(int tokIdx, const std::string& text, int textIdx) {
     if (tokIdx == tokens.size()) {
@@ -70,7 +80,9 @@ bool Regex::matchFrom(int tokIdx, const std::string& text, int textIdx) {
         }
         
         return matchFrom(tokIdx + 1, text, textIdx + 1);
-    } else if (tok.mod == Modifier::Star || tok.mod == Modifier::Plus) {
+    }
+
+    if (tok.mod == Modifier::Star || tok.mod == Modifier::Plus) {
         // * и + жадные моды: подсчет сколько символов в тексте подходит подряд
         int count = 0;
         while (textIdx + count < text.size() && atom.matches(text[textIdx + count])) {
@@ -82,7 +94,9 @@ bool Regex::matchFrom(int tokIdx, const std::string& text, int textIdx) {
         }
 
         return matchFrom(tokIdx + 1, text, textIdx + count);
-    } else { // Modifier::Question 
+    }
+
+    if (tok.mod == Modifier::Question){
         // попытка взять 0 символов
         if (matchFrom(tokIdx + 1, text, textIdx)) {
             return true;

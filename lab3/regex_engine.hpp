@@ -6,6 +6,7 @@
 
 class Atom {
 public:
+    // https://ravesli.com/urok-163-virtualnye-funktsii-i-polimorfizm/
     virtual bool matches(char c) const = 0;
     virtual ~Atom() = default;
 };
@@ -16,13 +17,17 @@ private:
     char ch;
 public:
     LiteralAtom(char c) : ch(c) {}
-    bool matches(char c) const override { return c == ch; }
+    bool matches(char c) const override {
+        return c == ch;
+    }
 };
 
 // любой символ: "."
 class AnyAtom : public Atom {
 public:
-    bool matches(char) const override { return true; }
+    bool matches(char) const override {
+        return true;
+    }
 };
 
 // группа символов: "[abc]"", "[a-z]
@@ -48,11 +53,13 @@ struct Token {
     Modifier mod;
 };
 
+// парсит шаблон в вектор токенов; сравнивает передаваемые строки с шаблоном рекурсивно через matchFrom()
 class Regex {
 private:
     std::vector<Token> tokens;
+    bool matchFrom(int tokIdx, const std::string& text, int textIdx);
 public:
     Regex(const std::string& pattern);
+    // ~Regex();
     bool match(const std::string& text);
-    bool matchFrom(int tokIdx, const std::string& text, int textIdx);
 };

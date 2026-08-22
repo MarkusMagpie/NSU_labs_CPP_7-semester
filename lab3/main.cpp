@@ -9,9 +9,9 @@ int main() {
 
     Regex regex(patrn);
 
-    std::string line;
-    while (std::getline(std::cin, line)) {
-        bool regex_res = regex.match(line);
+    std::string tested_string;
+    while (std::getline(std::cin, tested_string)) {
+        bool regex_res = regex.match(tested_string);
         std::string res;
         res = regex_res
                   ? "ДА. Введенная строка соответствует данному ранее шаблону регулярного выражения"
