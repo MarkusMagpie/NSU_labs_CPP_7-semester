@@ -1,0 +1,24 @@
+Задача 4: Трансформация сериализуемых объектов
+
+Сборка проекта (без тестов):
+    rm -rf build && mkdir build && cd build
+    cmake .. -DWITH_TESTS=OFF
+    cmake --build . --parallel 8
+
+Сборка проекта (с тестами):
+    rm -rf build && mkdir build && cd build
+    cmake .. -DWITH_TESTS=ON
+    cmake --build . --parallel 8
+
+    При передаче -DWITH_TESTS=ON cmake на этапе конфигурации автоматически вызывает
+    скрипт get_dependencies.sh, который клонирует Catch2 в директорию third_party/Catch2 если
+    папки ещё нет. Собирать вручную зависимости не нужно (больше) ((прям как у нас в проекте ядра)) (((гойда))).
+
+Запуск тестов (требует сборки с -DWITH_TESTS=ON; запуск происходит в директории build):
+    cd tests && ./unit_tests --order decl -s
+    (альтернативный запуск через CMake утилиту ctest) ctest --test-dir .
+
+Запуск программы:
+    ./res <input-format> <output-format>
+    где формат: json | toml | xml (регистр не важен).
+    Пример: echo '{"a":1, "abc":123}' | ./res json json
