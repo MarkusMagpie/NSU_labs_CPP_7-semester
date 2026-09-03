@@ -4,12 +4,13 @@ std::string parseSet(const std::string& pattern, int& i) {
     std::string chars;
     while (i < pattern.size() && pattern[i] != ']') {
         char c = pattern[i++];
-        // кейс "[a-z]"
+        // паттерн '[a-z]'
         if (i + 1 < pattern.size() && pattern[i] == '-' && pattern[i + 1] != ']') {
             char to = pattern[i + 1];
             i += 2;
-            for (char ch = c; ch <= to; ++ch)
+            for (char ch = c; ch <= to; ++ch) {
                 chars += ch;
+            }
         } else {
             chars += c;
         }
@@ -18,8 +19,6 @@ std::string parseSet(const std::string& pattern, int& i) {
 
     return chars;
 }
-
-
 
 Regex::Regex(const std::string& pattern) {
     int i = 0;
@@ -52,10 +51,13 @@ Regex::Regex(const std::string& pattern) {
         }
 
         tokens.push_back({std::move(atom), mod});
-        // Token лежат в std::vector. Когда вектор очищается (Regex уничтожается), то все Token в нем удаляются,
-        // а вместе с ними и unique_ptr внутри каждого токена автоматически вызывает delete на свой Atom
-        // это аргумент в пользу unique_ptr, иначе бы пришлось писать деструктор.
-        // а от меня в рамках задачи требуют "управление динамической памятью вручную" - unique_ptr автоматизирует эту задачу.
+        /*
+         * Token лежат в std::vector<tokens>. Когда вектор очищается (Regex уничтожается), то все Token в нем удаляются,
+         *  а вместе с ними и unique_ptr внутри каждого токена автоматически вызывает delete на свой Atom
+         *  это аргумент в пользу unique_ptr, иначе бы пришлось писать деструктор.
+         *  а от меня в рамках задачи требуют
+         *  "проявить знания в области управления динамической памятью в C++" - unique_ptr автоматизирует эту задачу.
+        */
     }
 }
 

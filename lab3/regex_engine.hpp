@@ -8,7 +8,7 @@ class Atom {
 public:
     // https://ravesli.com/urok-163-virtualnye-funktsii-i-polimorfizm/
     virtual bool matches(char c) const = 0;
-    virtual ~Atom() = default;
+    virtual ~Atom() = default; // чтобы вызывались дочерние деструкторы 
 };
 
 // конкретный символ: "a", "B", "3", " "

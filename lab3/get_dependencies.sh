@@ -7,11 +7,11 @@ THIRD_PARTY_DIR="$SCRIPT_DIR/third_party"
 get_sources() {
     local url="$1"
     local dest="$2"
-    local tag="$3"
+    local version="$3"
 
     if [ ! -d "$dest" ]; then
-        echo "Cloning $url -> $dest"
-        git clone --branch "$tag" --depth 1 "$url" "$dest"
+        echo "Cloning $url in $dest"
+        git clone --branch "$version" --depth 1 "$url" "$dest"
         git -C "$dest" submodule update --init --recursive
     else
         echo "Already exists: $dest"

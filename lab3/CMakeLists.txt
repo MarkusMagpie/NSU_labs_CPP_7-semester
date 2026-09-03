@@ -18,7 +18,7 @@ add_executable(res main.cpp)
 target_link_libraries(res PRIVATE regex_engine)
 
 if(WITH_TESTS)
-    # cmake переменная превращается в shell переменную
+    # cmake переменная WITH_TESTS превращается в shell переменную
     execute_process(
         COMMAND ${CMAKE_COMMAND} -E env WITH_TESTS=1
                 ${CMAKE_SOURCE_DIR}/get_dependencies.sh

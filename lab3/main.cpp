@@ -1,5 +1,4 @@
 #include <iostream>
-#include <string>
 #include "regex_engine.hpp"
 
 int main() {
