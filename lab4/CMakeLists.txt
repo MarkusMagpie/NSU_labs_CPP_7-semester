@@ -10,14 +10,18 @@ message(STATUS "source directory: ${CMAKE_SOURCE_DIR}")
 message(STATUS "WITH_TESTS: ${WITH_TESTS}")
 
 add_library(tree STATIC
-    format.cpp
-    io_utils.cpp
+    src/format.cpp
+    src/io_utils.cpp
+    src/value.cpp
+    src/parse_error.cpp
+    src/json_parser.cpp
+    src/json_writer.cpp
 )
 target_include_directories(tree PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
 )
 
-add_executable(res main.cpp)
+add_executable(res src/main.cpp)
 target_link_libraries(res PRIVATE tree)
 
 if(WITH_TESTS)

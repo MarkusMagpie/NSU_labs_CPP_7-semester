@@ -4,3 +4,4 @@ build/
 *.so
 .cache/
 .vscode/
+third_party/

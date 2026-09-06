@@ -1,13 +1,15 @@
 #include "format.hpp"
 #include <algorithm>
 #include <cctype>
+#include <optional>
+#include <string>
 
 namespace lab4 {
+enum class Format;
 
 namespace {
-
 std::string to_lower(std::string text) {
-    // "пройди по диапазону, к каждому элементу примени функцию, результат положи в другой (или тот же) диапазон"
+    // пройди по диапазону, к каждому элементу примени функцию, результат положи в другой (или тот же) диапазон
     std::transform(text.begin(), text.end(),
         text.begin(),
         [](unsigned char c) {
@@ -16,7 +18,6 @@ std::string to_lower(std::string text) {
 
     return text;
 }
-
 }  // namespace
 
 std::optional<Format> parse_format(std::string name) {
@@ -37,5 +38,4 @@ std::string to_string(Format format) {
 
     return "unknown";
 }
-
 }  // namespace lab4
