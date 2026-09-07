@@ -21,11 +21,12 @@ int main(int argc, char** argv) {
     }
 
     const std::string input = lab4::read_all(std::cin);
+    std::optional<lab4::Value> tree;
 
     if (*input_format == lab4::Format::Json && *output_format == lab4::Format::Json) {
         try {
-            const lab4::Value tree = lab4::parse_json(input); // JSON -> Value
-            lab4::write_json(tree, std::cout); // Value -> JSON
+            tree = lab4::parse_json(input); // JSON -> Value
+            lab4::write_json(*tree, std::cout); // Value -> JSON
         } catch (const lab4::ParseError& e) {
             std::cerr << e.what() << "\n";
 

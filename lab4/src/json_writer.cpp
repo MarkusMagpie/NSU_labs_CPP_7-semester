@@ -16,6 +16,7 @@ void write_escaped_string(const std::string& text, std::ostream& out) {
             case '\\': out << "\\\\"; break;
             case '\b': out << "\\b"; break;
             case '\f': out << "\\f"; break;
+            // "\n" в C++ - escape-sequence, дающая один байт. В out (json) нужно написать ее текстовое представление -> экранирую \ в \\, n без изменений
             case '\n': out << "\\n"; break;
             case '\r': out << "\\r"; break;
             case '\t': out << "\\t"; break;
