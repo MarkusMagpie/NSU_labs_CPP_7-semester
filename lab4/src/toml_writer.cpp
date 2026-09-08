@@ -63,14 +63,14 @@ void write_double(double value, std::ostream& out) {
 
 // запись value
 void write_scalar(const Value& value, std::ostream& out) {
-    if (value.is_bool()) {
-        out << (value.as_bool() ? "true" : "false");
-    } else if (value.is_int()) {
-        out << value.as_int();
-    } else if (value.is_double()) {
-        write_double(value.as_double(), out);
-    } else if (value.is_string()) {
-        write_escaped_string(value.as_string(), out);
+    if (value.is<bool>()) {
+        out << (value.as<bool>() ? "true" : "false");
+    } else if (value.is<int>()) {
+        out << value.as<int>();
+    } else if (value.is<double>()) {
+        write_double(value.as<double>(), out);
+    } else if (value.is<std::string>()) {
+        write_escaped_string(value.as<std::string>(), out);
     } else {
         throw std::invalid_argument(
             "write_toml: gjrf yt gjllth;bdftnccz");
@@ -79,11 +79,11 @@ void write_scalar(const Value& value, std::ostream& out) {
 }  // namespace
 
 void write_toml(const Value& value, std::ostream& out) {
-    if (!value.is_object()) {
+    if (!value.is<Object>()) {
         throw std::invalid_argument("write_toml: value должен быть таблицей (тип данных Object)");
     }
 
-    for (const auto& [key, member] : value.as_object()) {
+    for (const auto& [key, member] : value.as<Object>()) {
         write_key(key, out);
         out << " = ";
         write_scalar(member, out);

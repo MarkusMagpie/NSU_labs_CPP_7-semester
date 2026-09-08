@@ -22,11 +22,13 @@
     ./res <input-format> <output-format>
     где формат: json | toml | xml (регистр не важен).
     Пример(ы):
-        echo '{"a": 1, "abc": 123}' | ./res json json
-        echo '{"a": , "abc": 123}' | ./res json json   // вернет "ошибка парсинга в line 1, column 7: unexpected character ','"
+        echo '{"a": 1, "abc": 123}' | ./res json json               // {"a":1,"abc":123}
+        echo '{"a": , "abc": 123}' | ./res json json                // ошибка парсинга в line 1, column 7: unexpected character ','
 
-        printf 'a = 1\nb = "hi"\nc = true\n' | ./res toml json              // вернет {"a":1,"b":"hi","c":true}
-        printf 'a = tru\n' | ./res toml json          // вернет "ошибка парсинга в line 1, column 8: expected 'e'"
+        printf 'a = 1\nb = "hi"\nc = true\n' | ./res toml json      // {"a":1,"b":"hi","c":true}
+        printf 'a = tru\n' | ./res toml json                        // ошибка парсинга в line 1, column 8: expected 'e'
+
+        echo '{"a": "aaa", "abc": "abc"}' | ./res json toml         // a = "aaa"\nabc = "abc"
 
 
 
@@ -91,3 +93,45 @@ raw string literal R"(...)"  vs  обычная строка "...":
             b = "hello\nworld")"
         первый \n теперь настоящий (разделяет две TOML-строки), второй \n остаётся буквальным backslash+n -
         его разбирает parse_escape_seq() внутри парсера.
+
+
+
+Сериализация и десериализация объектов
+        десериализация = разбор текста в объект: parse_json / parse_toml (json_parser.cpp, toml_parser.cpp)
+            текст (JSON или TOML) -> lab4::Value
+        сериализация = запись объекта обратно в текст: write_json / write_toml (json_writer.cpp, toml_writer.cpp)
+            lab4::Value -> текст (JSON или TOML)
+
+    Где это происходит по шагам (main.cpp):
+        1) read_all(std::cin) - stdin в строку
+        2) ДЕСЕРИАЛИЗАЦИЯ: по input_format вызывается parse_json(input) или parse_toml(input)
+            -> получаю lab4::Value tree (текст исходного формата исчез, осталось только "абстрактное дерево")
+        3) СЕРИАЛИЗАЦИЯ: по output_format вызывается write_json(tree, std::cout) или
+            write_toml(tree, std::cout) -> tree превращается в текст уже другого формата
+        то есть "конвертация формата" в main.cpp это буквально пара
+        (десериализация во что-то общее) + (сериализация из этого общего во что-то другое).
+        Раз parse_* и write_* не завязаны друг на друга напрямую (общаются только через Value) -
+        механизм сериализации/десериализации как таковой реализован.
+
+    Что НЕ закрыто до конца (см. main.cpp, комментарий "XML пока не реализован ни на чтение, ни на
+    запись"): если input_format или output_format == Xml, main.cpp сразу возвращает ошибку и завершает
+    работу. Задание требует поддержку JSON, TOML И XML (три формата), а "Ссылки на материалы" прямо
+    просят прогнать сценарий JSON => TOML => XML => JSON и сравнить результат с исходником - сейчас
+    так сделать нельзя, потому что XML parser/writer не написаны.
+    Итог: сам механизм сериализации/десериализации выполнен и работает для JSON<->TOML,
+    включая round-trip тест write_json(parse_json(x)) == x (test_lab4.cpp:154), но пункт задания
+    целиком не закрыт пока нет xml_parser.* + xml_writer.* по аналогии с json/toml.
+
+Шаблонное метапрограммирование
+    было: 6 вручную написанных пар is_bool/as_bool, is_int/as_int, ... в value.cpp
+
+    стало (value.hpp): новые шаблонные методы Value::is<T>() / Value::as<T>() вместо шести функций.
+        template<typename T> bool is() const { ...; return std::holds_alternative<T>(data_); }
+        template<typename T> const T& as() const { ...; return std::get<T>(data_); }
+        template<typename T> T& as() { ...; return std::get<T>(data_); }  // для as_array()/as_object()
+
+    Старые is_bool/as_bool и тд в value.hpp/value.cpp не убраны так как их использует test_lab4.cpp
+        они просто стали обертками: bool Value::is_bool() const { return is<bool>(); }
+
+    В json_writer.cpp и toml_writer.cpp есть if/else цепочки
+    value.is_bool()/.as_bool()/... и они переписаны на value.is<bool>()/.as<bool>()/...

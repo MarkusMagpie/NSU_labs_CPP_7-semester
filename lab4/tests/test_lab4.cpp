@@ -28,24 +28,24 @@ TEST_CASE("to_string обратная операция к parse_format", "[forma
 
 // ТЕСТЫ JSON ПАРСЕРА --------------------------------------------------------------------------------------------------
 TEST_CASE("parse_json читает bool литералы", "[json]") {
-    REQUIRE(lab4::parse_json("true").as_bool() == true); // строка "true" превращается в Value у которого as_bool() возвращает true
+    REQUIRE(lab4::parse_json("true").as<bool>() == true); // строка "true" превращается в Value у которого as_bool() возвращает true
     REQUIRE(lab4::parse_json("false").as_bool() == false);
 }
 
 TEST_CASE("parse_json читает int", "[json]") {
-    REQUIRE(lab4::parse_json("0").as_int() == 0);
+    REQUIRE(lab4::parse_json("0").as<int>() == 0);
     REQUIRE(lab4::parse_json("100").as_int() == 100);
     REQUIRE(lab4::parse_json("-100").as_int() == -100);
 }
 
 TEST_CASE("parse_json reads doubles", "[json]") {
-    REQUIRE(lab4::parse_json("3.14").as_double() == 3.14);
+    REQUIRE(lab4::parse_json("3.14").as<double>() == 3.14);
     REQUIRE(lab4::parse_json("-1.0e3").as_double() == -1000.0);
 }
 
 TEST_CASE("parse_json игнорит пробелы", "[json]") {
     // чек skip_whitespace() - что пробелы до и после значения не мешают парсингу и не идут в результат как часть значения
-    REQUIRE(lab4::parse_json("  42     ").as_int() == 42);
+    REQUIRE(lab4::parse_json("  42     ").as<int>() == 42);
 }
 
 TEST_CASE("parse_json reports errors", "[json]") {
@@ -58,7 +58,7 @@ TEST_CASE("parse_json читает одномерный массив/array (по
 
     REQUIRE(v.is_array());
     REQUIRE(v.as_array().size() == 3);
-    REQUIRE(v.as_array()[0].as_int() == 1);
+    REQUIRE(v.as_array()[0].as<int>() == 1);
     REQUIRE(v.as_array()[1].as_int() == 2);
     REQUIRE(v.as_array()[2].as_int() == 3);
 }
@@ -68,7 +68,7 @@ TEST_CASE("parse_json читает object без вложенностей и с�
     lab4::Value v = lab4::parse_json(R"({"b": 1, "a": 2})"); // альтернатива: "{\"b\": 1, \"a\": 2}
     REQUIRE(v.is_object());
 
-    lab4::Object& obj = v.as_object();
+    lab4::Object& obj = v.as<lab4::Object>();
     REQUIRE(obj.size() == 2);
     REQUIRE(obj[0].first == "b");
     REQUIRE(obj[0].second.as_int() == 1);
@@ -78,11 +78,11 @@ TEST_CASE("parse_json читает object без вложенностей и с�
 
 TEST_CASE("parse_json правильно читает вложенные arrays + objects", "[json]") {
     const lab4::Value v = lab4::parse_json(R"({"name": "Vasya", "grades": [4, 5, 5, 3], "address": {"city": "Novosibirsk"}})");
-    REQUIRE(v.as_object()[0].second.as_string() == "Vasya");
+    REQUIRE(v.as_object()[0].second.as<std::string>() == "Vasya");
 
     const lab4::Array& grades = v.as_object()[1].second.as_array();
     REQUIRE(grades.size() == 4);
-    REQUIRE(grades[0].as_int() == 4);
+    REQUIRE(grades[0].as<int>() == 4);
     REQUIRE(grades[1].as_int() == 5);
     REQUIRE(grades[2].as_int() == 5);
     REQUIRE(grades[3].as_int() == 3);

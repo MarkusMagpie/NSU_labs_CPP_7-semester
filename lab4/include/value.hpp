@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -12,6 +13,20 @@ class Value;
 using Array = std::vector<Value>;
 // Object = Объект - упорядоченный список пар "ключ, значение": {"name": "vasya", "age": 20}
 using Object = std::vector<std::pair<std::string, Value>>;
+
+namespace detail {
+// is_alternative<T, Variant>::value == true тогда и только тогда, когда T есть среди
+// типов-альтернатив Variant (например Variant = std::variant<bool, int, ...>).
+// Это шаблонное метапрограммирование: компилятор во время компиляции "перебирает" Ts...
+// через std::disjunction<std::is_same<T, Ts>...> и получает true/false как constexpr-значение,
+// без единой рантайм-проверки.
+template<typename T, typename Variant>
+struct is_alternative;
+
+template<typename T, typename... Ts>
+struct is_alternative<T, std::variant<Ts...>> : std::disjunction<std::is_same<T, Ts>...> {};
+}  // namespace detail
+
 // Value = узел абстрактного дерева
 class Value {
 public:
@@ -24,6 +39,23 @@ public:
     Value(Array value);
     Value(Object value);
 
+    template<typename T>
+    bool is() const {
+        return std::holds_alternative<T>(data_); // содержит ли data_ тип T?
+    }
+
+    template<typename T>
+    const T& as() const {
+        return std::get<T>(data_);
+    }
+
+    template<typename T>
+    T& as() {
+        return std::get<T>(data_);
+    }
+
+    // старые именованные методы оставлены ради обратной совместимости в тестах
+    // внутри (см value.cpp) они используют шаблонные метожы is<T>()/as<T>()
     bool is_bool() const;
     bool is_int() const;
     bool is_double() const;

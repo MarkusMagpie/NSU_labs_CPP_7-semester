@@ -11,34 +11,23 @@ Value::Value(Array value) : data_(std::move(value)) {}
 Value::Value(Object value) : data_(std::move(value)) {}
 
 
-bool Value::is_bool() const {
-    return std::holds_alternative<bool>(data_);
-}
-bool Value::is_int() const {
-    return std::holds_alternative<int>(data_);
-}
-bool Value::is_double() const {
-    return std::holds_alternative<double>(data_);
-}
-bool Value::is_string() const {
-    return std::holds_alternative<std::string>(data_);
-}
-bool Value::is_array() const {
-    return std::holds_alternative<Array>(data_);
-}
-bool Value::is_object() const {
-    return std::holds_alternative<Object>(data_);
-}
+// is_bool/as_bool - обертки над шаблонными is<T>()/as<T>() (см value.hpp)
+bool Value::is_bool() const { return is<bool>(); }
+bool Value::is_int() const { return is<int>(); }
+bool Value::is_double() const { return is<double>(); }
+bool Value::is_string() const { return is<std::string>(); }
+bool Value::is_array() const { return is<Array>(); }
+bool Value::is_object() const { return is<Object>(); }
 
 
-bool Value::as_bool() const { return std::get<bool>(data_); }
-int Value::as_int() const { return std::get<int>(data_); }
-double Value::as_double() const { return std::get<double>(data_); }
+bool Value::as_bool() const { return as<bool>(); }
+int Value::as_int() const { return as<int>(); }
+double Value::as_double() const { return as<double>(); }
 
-const std::string& Value::as_string() const { return std::get<std::string>(data_); }
-const Array& Value::as_array() const { return std::get<Array>(data_); }
-Array& Value::as_array() { return std::get<Array>(data_); }
-const Object& Value::as_object() const { return std::get<Object>(data_); }
-Object& Value::as_object() { return std::get<Object>(data_); }
+const std::string& Value::as_string() const { return as<std::string>(); }
+const Array& Value::as_array() const { return as<Array>(); }
+Array& Value::as_array() { return as<Array>(); }
+const Object& Value::as_object() const { return as<Object>(); }
+Object& Value::as_object() { return as<Object>(); }
 
 }  // namespace lab4

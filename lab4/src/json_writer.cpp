@@ -43,25 +43,25 @@ void write_double(double value, std::ostream& out) {
 }  // namespace
 
 void write_json(const Value& value, std::ostream& out) {
-    if (value.is_bool()) {
-        out << (value.as_bool() ? "true" : "false");
-    } else if (value.is_int()) {
-        out << value.as_int();
-    } else if (value.is_double()) {
-        write_double(value.as_double(), out);
-    } else if (value.is_string()) {
-        write_escaped_string(value.as_string(), out);
-    } else if (value.is_array()) {
+    if (value.is<bool>()) {
+        out << (value.as<bool>() ? "true" : "false");
+    } else if (value.is<int>()) {
+        out << value.as<int>();
+    } else if (value.is<double>()) {
+        write_double(value.as<double>(), out);
+    } else if (value.is<std::string>()) {
+        write_escaped_string(value.as<std::string>(), out);
+    } else if (value.is<Array>()) {
         out << '[';
-        const Array& items = value.as_array();
+        const Array& items = value.as<Array>();
         for (std::size_t i = 0; i < items.size(); ++i) {
             if (i != 0) out << ',';
             write_json(items[i], out);
         }
         out << ']';
-    } else if (value.is_object()) {
+    } else if (value.is<Object>()) {
         out << '{';
-        const Object& members = value.as_object();
+        const Object& members = value.as<Object>();
         for (std::size_t i = 0; i < members.size(); ++i) {
             if (i != 0) out << ',';
             write_escaped_string(members[i].first, out);
