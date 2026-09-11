@@ -11,15 +11,15 @@
 int main(int argc, char** argv) {
     if (argc != 3) return 1;
 
-    const auto input_format = lab4::parse_format(argv[1]);
-    const auto output_format = lab4::parse_format(argv[2]);
+    auto input_format = lab4::parse_format(argv[1]);
+    auto output_format = lab4::parse_format(argv[2]);
 
     if (!input_format) {
-        std::cerr << "Unknown input format was used: " << argv[1] << "\n";
+        std::cerr << "Входной формат не входит в список {JSON, TOML, XML}: " << argv[1] << "\n";
         return 1;
     }
     if (!output_format) {
-        std::cerr << "Unknown output format was used: " << argv[2] << "\n";
+        std::cerr << "ВЫходной формат не входит в список {JSON, TOML, XML}: " << argv[2] << "\n";
         return 1;
     }
 

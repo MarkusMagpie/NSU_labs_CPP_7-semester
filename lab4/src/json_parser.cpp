@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <string_view>
+#include <utility>
 
 #include "parse_error.hpp"
 
@@ -12,12 +13,12 @@ namespace {
 // из тех же значений
 class JsonParser {
 private:
-    std::string_view text_; // разбираемый текст
+    std::string text_; // разбираемый текст
     std::size_t pos_ = 0; // индекс текущего символа в разбираемом тексте
     std::size_t line_ = 1; // текущая строка (для сообщений об ошибках)
     std::size_t column_ = 1; // текущий столбец (для сообщений об ошибках)
 public:
-    JsonParser(std::string_view text) : text_(text) {}
+    JsonParser(std::string text) : text_(std::move(text)) {}
 
     // ПРИМИТИВЫ -------------------------------------------------------------------------------------------------------
     bool eof() const {
@@ -279,7 +280,7 @@ public:
 
 
 // точка входа
-Value parse_json(std::string_view text) {
+Value parse_json(std::string text) {
     JsonParser parser(text);
 
     return parser.parse();

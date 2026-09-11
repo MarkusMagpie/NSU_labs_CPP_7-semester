@@ -5,8 +5,6 @@
 #include <string>
 
 namespace lab4 {
-enum class Format;
-
 namespace {
 std::string to_lower(std::string text) {
     // пройди по диапазону, к каждому элементу примени функцию, результат положи в другой (или тот же) диапазон
