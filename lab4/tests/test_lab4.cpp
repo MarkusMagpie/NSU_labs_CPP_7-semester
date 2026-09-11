@@ -10,6 +10,8 @@
 #include "toml_parser.hpp"
 #include "toml_writer.hpp"
 #include "value.hpp"
+#include "xml_parser.hpp"
+#include "xml_writer.hpp"
 
 TEST_CASE("parse_format recognizes known formats", "[format]") {
     REQUIRE(lab4::parse_format("json") == lab4::Format::Json);
@@ -245,9 +247,143 @@ TEST_CASE("write_toml: json -> toml: TOML writer экранирует спецс
 // Value со строкой из 7 настоящих байт: a, ", b, \, c, <newline>, d
 // результат: a,  , =,  , ", a, \, ", b, \, \, c, \, n, d, ", <newline-байт>
 
+// ТЕСТЫ JSON -> TOML -> JSON (полный JSON=>TOML=>XML=>JSON появится когда будет готов XML) ----------------------------
+namespace {
+    // json_text парсится JSON-парсером, пишется в формате TOML, парсится обратно TOML-парсером и снова пишется JSON-writerом
+    std::string json_via_toml(std::string& json_text) {
+        std::ostringstream toml_out;
+        lab4::write_toml(lab4::parse_json(json_text), toml_out); // JSON -> toml
+        return write_json_to_string(lab4::parse_toml(toml_out.str())); // toml -> json
+    }
+}// namespace
+
+TEST_CASE("json -> toml -> json: скалярные значения переживают round-trip", "[toml][roundtrip]") {
+    std::string canon = R"({"a":true,"b":1,"c":3.14,"d":"hello"})";
+    REQUIRE(json_via_toml(canon) == canon);
+}
+
+TEST_CASE("json -> toml -> json: ключ с пробелом и экранированная строка переживают round-trip", "[toml][roundtrip]") {
+    std::string canon = R"({"my key":-100,"text":"a\"b\\c\nd"})";
+    // parse_escape_seq в json_parser.cpp превратит второй value в: a " b \  c <newline> d = 7 байт
+    // в write_toml эти сиволы буудт сновва экранированы; потом parse_toml, write_json заново экранирует 7 байт и на выходе будет исходный "a\"b\\c\nd"
+    REQUIRE(json_via_toml(canon) == canon);
+}
+
+
+
 // ТЕСТЫ XML ПАРСЕРА ---------------------------------------------------------------------------------------------------
+TEST_CASE("parse_xml читает bool литералы", "[xml]") {
+    lab4::Value v = lab4::parse_xml(R"(<root><entry key="a" type="bool">true</entry></root>)");
+    REQUIRE(v.as_object()[0].second.as_bool() == true);
+    lab4::Value v2 = lab4::parse_xml(R"(<root><entry key="a" type="bool">false</entry></root>)");
+    REQUIRE(v2.as_object()[0].second.as_bool() == false);
+}
 
-// ТЕСТЫ XML WRITER ----------------------------------------------------------------------------------------------------
+TEST_CASE("parse_xml читает int", "[xml]") {
+    lab4::Value v = lab4::parse_xml(
+        R"(<root><entry key="a" type="int">0</entry><entry key="b" type="int">100</entry><entry key="c" type="int">-1000</entry></root>)");
+    lab4::Object& obj = v.as_object(); // получу список из трех пар
 
-// в самом конце сделать такой сценарий теста: JSON => TOML; TOML => XML; XML => JSON
-// и сравнить изначальные данные и данные, полученные в конце.
+    REQUIRE(obj[0].second.as_int() == 0);
+    REQUIRE(obj[1].second.as_int() == 100);
+    REQUIRE(obj[2].second.as_int() == -1000);
+}
+
+TEST_CASE("parse_xml читает double", "[xml]") {
+    lab4::Value v = lab4::parse_xml(
+        R"(<root><entry key="a" type="double">3.14</entry><entry key="b" type="double">-1.0e3</entry></root>)");
+    lab4::Object& obj = v.as_object();
+
+    REQUIRE(obj[0].second.as_double() == 3.14);
+    REQUIRE(obj[1].second.as_double() == -1000.0);
+}
+
+TEST_CASE("parse_xml читает string", "[xml]") {
+    lab4::Value v = lab4::parse_xml(R"(<root><entry key="a" type="string">hello</entry></root>)");
+    REQUIRE(v.as_object()[0].second.as_string() == "hello");
+}
+
+TEST_CASE("parse_xml пропускает пролог перед корнем", "[xml]") {
+    lab4::Value v = lab4::parse_xml(
+        R"(<?xml version="1.0" encoding="UTF-8"?><root><entry key="a" type="int">1</entry></root>)");
+    REQUIRE(v.as_object()[0].second.as_int() == 1);
+
+    lab4::Value v2 = lab4::parse_xml(
+        R"(<?xmlааа крокодилы бегемоты?><root><entry key="a" type="int">1</entry></root>)");
+    REQUIRE(v2.as_object()[0].second.as_int() == 1);
+}
+
+TEST_CASE("parse_xml сохраняет порядок key атрибутов", "[xml]") {
+    lab4::Value v = lab4::parse_xml(
+        R"(<root><entry key="b" type="int">1</entry><entry key="a" type="int">2</entry></root>)");
+    lab4::Object& obj = v.as_object();
+
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].first == "b");
+    REQUIRE(obj[1].first == "a");
+}
+
+TEST_CASE("parse_xml не зависит от порядка атрибутов key и type внутри entry", "[xml]") {
+    lab4::Value v = lab4::parse_xml(R"(<root><entry type="int" key="a">1</entry></root>)");
+    REQUIRE(v.as_object()[0].first == "a");
+    REQUIRE(v.as_object()[0].second.as_int() == 1);
+}
+
+TEST_CASE("parse_xml обрабатывает какието ошибки", "[xml]") {
+    REQUIRE_THROWS_AS(lab4::parse_xml(""), lab4::ParseError); // пустой документ, нет <root>
+    REQUIRE_THROWS_AS(lab4::parse_xml(R"(<?xml version="1.0"><root></root>)"), lab4::ParseError);
+    REQUIRE_THROWS_AS(lab4::parse_xml(R"(<lalala></lalala>)"), lab4::ParseError);
+    REQUIRE_THROWS_AS(lab4::parse_xml(R"(<root>)"), lab4::ParseError);
+    REQUIRE_THROWS_AS(lab4::parse_xml(R"(<root></root> garbage)"), lab4::ParseError);
+
+    REQUIRE_THROWS_AS(lab4::parse_xml(R"(<root><entry key="a">1</entry></root>)"), lab4::ParseError); // нет type
+    REQUIRE_THROWS_AS(lab4::parse_xml(R"(<root><entry type="int">1</entry></root>)"), lab4::ParseError); // нет key
+
+    REQUIRE_THROWS_AS(lab4::parse_xml(R"(<root><entry key="a" type="lalala">1</entry></root>)"), lab4::ParseError);
+    REQUIRE_THROWS_AS(lab4::parse_xml(R"(<root><entry key="a" type="int">1</root>)"), lab4::ParseError);
+}
+
+// ТЕСТЫ XML WRITER (JSON -> XML) --------------------------------------------------------------------------------------
+namespace {
+    // json_text -> JSON-парсер; сериализация XML-writerом
+    std::string json_to_xml(const std::string& json_text) {
+        std::ostringstream out; // поток вывода для записи в строки
+        lab4::write_xml(lab4::parse_json(json_text), out);
+
+        return out.str();
+    }
+}// namespace
+
+TEST_CASE("write_xml: json -> xml для скалярных значений", "[xml][writer]") {
+    REQUIRE(json_to_xml(R"({"a": true, "b": 1, "c": 3.14, "d": "hello"})")
+        == "<root>\n"
+           "  <entry key=\"a\" type=\"bool\">true</entry>\n"
+           "  <entry key=\"b\" type=\"int\">1</entry>\n"
+           "  <entry key=\"c\" type=\"double\">3.14</entry>\n"
+           "  <entry key=\"d\" type=\"string\">hello</entry>\n"
+           "</root>\n");
+}
+
+// ФИНАЛЬНЫЙ СЦЕНАРИЙ ---------------------------------------------------------------------------------------------------
+// из условия: JSON => TOML; TOML => XML; XML => JSON и сравнить изначальные данные с данными, полученными в конце
+namespace {
+    std::string json_via_toml_via_xml(const std::string& json_text) {
+        std::ostringstream toml_out; // поток вывода для записи в строки
+        lab4::write_toml(lab4::parse_json(json_text), toml_out);
+
+        std::ostringstream xml_out;
+        lab4::write_xml(lab4::parse_toml(toml_out.str()), xml_out);
+
+        return write_json_to_string(lab4::parse_xml(xml_out.str()));
+    }
+} // namespace
+
+TEST_CASE("JSON => TOML => XML => JSON: скалярные значения переживают полный цикл", "[roundtrip]") {
+    std::string canon = R"({"a100500":true,"b123":1,"c4":3.14,"d13":"hello"})";
+    REQUIRE(json_via_toml_via_xml(canon) == canon);
+}
+
+TEST_CASE("JSON => TOML => XML => JSON: ключ с пробелом и отрицательные числа переживают полный цикл", "[roundtrip]") {
+    std::string canon = R"({"my key 228":-100,"pipiap":-3.14})";
+    REQUIRE(json_via_toml_via_xml(canon) == canon);
+}

@@ -1,7 +1,6 @@
 #include "json_parser.hpp"
 
 #include <cctype>
-#include <string_view>
 #include <utility>
 
 #include "parse_error.hpp"
@@ -177,7 +176,7 @@ public:
 
     // дальше в тексте идет "true"/"false"?
     // если да то возвращает заранее подготовленное значение
-    Value parse_keyword(std::string_view keyword, Value result) {
+    Value parse_keyword(std::string keyword, Value result) {
         // t->r->u->e и f->a->l->s->e
         for (char expected : keyword) {
             expect(expected); // text_[0] == 't'? -> advance ...

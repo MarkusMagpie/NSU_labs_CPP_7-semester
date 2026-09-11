@@ -18,6 +18,8 @@ add_library(tree STATIC
     src/json_writer.cpp
     src/toml_parser.cpp
     src/toml_writer.cpp
+    src/xml_parser.cpp
+    src/xml_writer.cpp
 )
 target_include_directories(tree PUBLIC
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>

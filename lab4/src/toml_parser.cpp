@@ -1,9 +1,7 @@
 #include "toml_parser.hpp"
-
+#include "parse_error.hpp"
 #include <cctype>
 #include <string_view>
-
-#include "parse_error.hpp"
 
 namespace lab4 {
 namespace {

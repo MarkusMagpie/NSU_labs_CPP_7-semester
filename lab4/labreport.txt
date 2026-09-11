@@ -30,6 +30,17 @@
 
         echo '{"a": "aaa", "abc": "abc"}' | ./res json toml         // a = "aaa"\nabc = "abc"
 
+        xml -> xml:
+            printf '<root>\n  <entry key="a" type="int">1</entry>\n  <entry key="abc" type="int">123</entry>\n</root>\n' | ./res xml xml
+            <root>
+              <entry key="a" type="int">1</entry>
+              <entry key="abc" type="int">123</entry>
+            </root>
+
+        xml, ошибка парсинга:
+            printf '<root>\n  <entry key="a" type="int">abc</entry>\n</root>\n' | ./res xml xml
+            // ошибка парсинга в line 2, column 40: инвалид int value 'abc'
+
 
 
 внутри класса Value лежит одно поле:
@@ -78,7 +89,7 @@ raw string literal R"(...)"  vs  обычная строка "...":
         Например: R"({"a": 1})"
         НО (важно!): R"(a\nb)" - это НЕ перевод строки! Это ДВА обычных символа: backslash и буква n.
             raw string их не трогает и не превращает ни во что.
-        если внутри raw string нужен настоящий перевод строки - его нужно писать РЕАЛЬНЫМ Enter в самом .cpp файле:
+        если внутри raw string нужен настоящий перевод строки то его нужно писать РЕАЛЬНЫМ Enter в самом .cpp файле:
             R"(a
             b)" - между a и b Enter был физически нажат
 
@@ -113,14 +124,7 @@ raw string literal R"(...)"  vs  обычная строка "...":
         Раз parse_* и write_* не завязаны друг на друга напрямую (общаются только через Value) -
         механизм сериализации/десериализации как таковой реализован.
 
-    Что НЕ закрыто до конца (см. main.cpp, комментарий "XML пока не реализован ни на чтение, ни на
-    запись"): если input_format или output_format == Xml, main.cpp сразу возвращает ошибку и завершает
-    работу. Задание требует поддержку JSON, TOML И XML (три формата), а "Ссылки на материалы" прямо
-    просят прогнать сценарий JSON => TOML => XML => JSON и сравнить результат с исходником - сейчас
-    так сделать нельзя, потому что XML parser/writer не написаны.
-    Итог: сам механизм сериализации/десериализации выполнен и работает для JSON<->TOML,
-    включая round-trip тест write_json(parse_json(x)) == x (test_lab4.cpp:154), но пункт задания
-    целиком не закрыт пока нет xml_parser.* + xml_writer.* по аналогии с json/toml.
+
 
 Шаблонное метапрограммирование
     было: 6 вручную написанных пар is_bool/as_bool, is_int/as_int, ... в value.cpp
@@ -135,3 +139,14 @@ raw string literal R"(...)"  vs  обычная строка "...":
 
     В json_writer.cpp и toml_writer.cpp есть if/else цепочки
     value.is_bool()/.as_bool()/... и они переписаны на value.is<bool>()/.as<bool>()/...
+
+    ПАРСИНГ XML ФОРМАТА
+        пример XML-файла: https://learn.microsoft.com/ru-ru/dotnet/standard/linq/sample-xml-file-books
+        Я решил что строку-пролог буду скипать. Сам парсер работает как и 2 других: текст в формате XML -> абстрактное дерево Value
+        поддерживается только плоская схема:
+             <root>
+                 <entry key="..." type="bool || int || double || string">value</entry>
+                 ...
+             </root>
+        Пример: <entry key="a" type="bool">false</entry> - то есть вездед будут атрибуты в открывающемся теге
+        value/значение: bool/int/double/string (как в TOML)
