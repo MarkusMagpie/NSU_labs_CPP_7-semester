@@ -16,7 +16,7 @@ using Object = std::vector<std::pair<std::string, Value>>;
 // Value = узел абстрактного дерева
 class Value {
 public:
-    using Storage = std::variant<bool, int, double, std::string, Array, Object>;
+    using Storage = std::variant<bool, int, double, std::string, Array, Object>; // using=alias
 
     Value(bool value);
     Value(int value);

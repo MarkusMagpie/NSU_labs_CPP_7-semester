@@ -137,16 +137,13 @@ raw string literal R"(...)"  vs  обычная строка "...":
     Старые is_bool/as_bool и тд в value.hpp/value.cpp не убраны так как их использует test_lab4.cpp
         они просто стали обертками: bool Value::is_bool() const { return is<bool>(); }
 
-    В json_writer.cpp и toml_writer.cpp есть if/else цепочки
-    value.is_bool()/.as_bool()/... и они переписаны на value.is<bool>()/.as<bool>()/...
-
-    ПАРСИНГ XML ФОРМАТА
-        пример XML-файла: https://learn.microsoft.com/ru-ru/dotnet/standard/linq/sample-xml-file-books
-        Я решил что строку-пролог буду скипать. Сам парсер работает как и 2 других: текст в формате XML -> абстрактное дерево Value
-        поддерживается только плоская схема:
-             <root>
-                 <entry key="..." type="bool || int || double || string">value</entry>
-                 ...
-             </root>
-        Пример: <entry key="a" type="bool">false</entry> - то есть вездед будут атрибуты в открывающемся теге
-        value/значение: bool/int/double/string (как в TOML)
+ПАРСИНГ XML ФОРМАТА
+    пример XML-файла: https://learn.microsoft.com/ru-ru/dotnet/standard/linq/sample-xml-file-books
+    Я решил что строку-пролог буду скипать. Сам парсер работает как и 2 других: текст в формате XML -> абстрактное дерево Value
+    поддерживается только плоская схема:
+         <root>
+             <entry key="..." type="bool || int || double || string">value</entry>
+             ...
+         </root>
+    Пример: <entry key="a" type="bool">false</entry> - то есть вездед будут атрибуты в открывающемся теге
+    value/значение: bool/int/double/string (как в TOML)

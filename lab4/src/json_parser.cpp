@@ -7,9 +7,8 @@
 
 namespace lab4 {
 namespace {
-// умеет разбирать все значения JSON: скаляры (true/false, числа, строки),
-// составные значения (массивы, объекты), которые рекурсивно состоят
-// из тех же значений
+// json парсер парсит: 1 - скаляры (true/false, числа, строки),
+// 2 - массивы и объекты (которые рекурсивно состоят из тех же значений)
 class JsonParser {
 private:
     std::string text_; // разбираемый текст
@@ -25,7 +24,7 @@ public:
     }
 
     // возвращает текущий символ
-    char peek() const {
+    char peek() {
         if (eof()) {
             error("unexpected end of input");
         }
@@ -57,14 +56,14 @@ public:
     }
 
     // бросить ParseError с текущими line_/column_
-    void error(const std::string& message) const {
+    void error(const std::string& message) {
         throw ParseError(message, line_, column_);
     }
 
     void skip_whitespace() {
         while (!eof()) {
             char c = text_[pos_];
-            if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            if (c == ' ' || c == '\t' || c == '\n') {
                 advance();
             } else {
                 break;
@@ -242,7 +241,7 @@ public:
 
         std::string result;
         while (true) {
-            if (eof()) error("unterminated string literal");
+            if (eof()) error("незавершенный строковый литерал");
             char c = advance(); // берется текущий символ и сдвигается
             if (c == '"') break;
             if (c == '\\') {

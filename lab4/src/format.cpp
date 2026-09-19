@@ -19,7 +19,7 @@ std::string to_lower(std::string text) {
 }  // namespace
 
 std::optional<Format> parse_format(std::string name) {
-    const std::string lowered = to_lower(name);
+    std::string lowered = to_lower(name);
     if (lowered == "json") return Format::Json;
     if (lowered == "toml") return Format::Toml;
     if (lowered == "xml") return Format::Xml;

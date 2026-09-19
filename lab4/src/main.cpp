@@ -1,5 +1,6 @@
 #include <iostream>
 #include <stdexcept>
+#include <variant>
 #include "format.hpp"
 #include "io_utils.hpp"
 #include "json_parser.hpp"
@@ -17,7 +18,7 @@ int main(int argc, char** argv) {
     auto output_format = lab4::parse_format(argv[2]);
 
     if (!input_format) {
-        std::cerr << "Входной формат не входит в список {JSON, TOML, XML}: " << argv[1] << "\n";
+        std::cerr << "Входной формат не входит в следующий список {JSON, TOML, XML}: " << argv[1] << "\n";
         return 1;
     }
     if (!output_format) {
@@ -25,17 +26,21 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    const std::string input = lab4::read_all(std::cin);
+    std::string input = lab4::read_all(std::cin);
 
     try {
-        // input_format -> Value
-        const lab4::Value tree = [&]() -> lab4::Value
-        {
-            if (*input_format == lab4::Format::Json) return lab4::parse_json(input);
-            if (*input_format == lab4::Format::Toml) return lab4::parse_toml(input);
+        // ДЕСЕРИАЛИЗАЦИЯ: input_format -> Value
+        lab4::Value tree = [&]() -> lab4::Value {
+            if (*input_format == lab4::Format::Json) {
+                return lab4::parse_json(input);
+            }
+            if (*input_format == lab4::Format::Toml) {
+                return lab4::parse_toml(input);
+            }
             return lab4::parse_xml(input);
         }(); // сразу лямбда функцию вызвал
 
+        // Преобразование абстрактного дерева в заданный выходной формат представления = СЕРИАЛИЗАЦИЯ
         // Value -> output_format
         if (*output_format == lab4::Format::Json) {
             lab4::write_json(tree, std::cout);
@@ -46,7 +51,16 @@ int main(int argc, char** argv) {
         }
     } catch (const lab4::ParseError& e) {
         // ошибка синтаксиса во входном документе (JSON/TOML/XML)
-        std::cerr << e.what() << "\n";
+        std::cerr << "ошибка синтаксиса во входном документе: " << e.what() << "\n";
+
+        return 1;
+    } catch (const std::bad_variant_access& e) {
+        std::cerr << "внутренняя ошибка работы as<T>() (баг): " << e.what() << "\n";
+
+        return 1;
+    } catch (const std::invalid_argument& e) {
+        // дерево Value несовместимо с выбранным выходным форматом
+        std::cerr << "дерево несовместимо с выходным форматом: " << e.what() << "\n";
 
         return 1;
     }

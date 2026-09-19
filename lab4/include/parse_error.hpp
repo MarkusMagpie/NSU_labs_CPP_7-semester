@@ -13,7 +13,7 @@ private:
 public:
     ParseError(std::string message, std::size_t line, std::size_t column);
 
-    std::size_t line() const { return line_; }
-    std::size_t column() const { return column_; }
+    std::size_t line() { return line_; }
+    std::size_t column() { return column_; }
 };
 }  // namespace lab4
