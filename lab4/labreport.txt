@@ -22,24 +22,27 @@
     ./res <input-format> <output-format>
     где формат: json | toml | xml (регистр не важен).
     Пример(ы):
-        echo '{"a": 1, "abc": 123}' | ./res json json               // {"a":1,"abc":123}
-        echo '{"a": , "abc": 123}' | ./res json json                // ошибка парсинга в line 1, column 7: unexpected character ','
+        Вариант 1:
+            echo '{"a": 1, "abc": 123}' | ./res json json               // {"a":1,"abc":123}
+            echo '{"a": , "abc": 123}' | ./res json json                // ошибка парсинга в line 1, column 7: unexpected character ','
 
-        printf 'a = 1\nb = "hi"\nc = true\n' | ./res toml json      // {"a":1,"b":"hi","c":true}
-        printf 'a = tru\n' | ./res toml json                        // ошибка парсинга в line 1, column 8: expected 'e'
+            printf 'a = 1\nb = "hi"\nc = true\n' | ./res toml json      // {"a":1,"b":"hi","c":true}
+            printf 'a = tru\n' | ./res toml json                        // ошибка парсинга в line 1, column 8: expected 'e'
 
-        echo '{"a": "aaa", "abc": "abc"}' | ./res json toml         // a = "aaa"\nabc = "abc"
+            echo '{"a": "aaa", "abc": "abc"}' | ./res json toml         // a = "aaa"\nabc = "abc"
 
-        xml -> xml:
-            printf '<root>\n  <entry key="a" type="int">1</entry>\n  <entry key="abc" type="int">123</entry>\n</root>\n' | ./res xml xml
-            <root>
-              <entry key="a" type="int">1</entry>
-              <entry key="abc" type="int">123</entry>
-            </root>
+            xml -> xml:
+                printf '<root>\n  <entry key="a" type="int">1</entry>\n  <entry key="abc" type="int">123</entry>\n</root>\n' | ./res xml xml
+                <root>
+                  <entry key="a" type="int">1</entry>
+                  <entry key="abc" type="int">123</entry>
+                </root>
 
-        xml, ошибка парсинга:
-            printf '<root>\n  <entry key="a" type="int">abc</entry>\n</root>\n' | ./res xml xml
-            // ошибка парсинга в line 2, column 40: инвалид int value 'abc'
+            xml, ошибка парсинга:
+                printf '<root>\n  <entry key="a" type="int">abc</entry>\n</root>\n' | ./res xml xml
+                // ошибка парсинга в line 2, column 40: инвалид int value 'abc'
+        Вариант 2:
+            ./res json json < test.json
 
 
 
@@ -139,8 +142,7 @@ raw string literal R"(...)"  vs  обычная строка "...":
 
 ПАРСИНГ XML ФОРМАТА
     пример XML-файла: https://learn.microsoft.com/ru-ru/dotnet/standard/linq/sample-xml-file-books
-    Я решил что строку-пролог буду скипать. Сам парсер работает как и 2 других: текст в формате XML -> абстрактное дерево Value
-    поддерживается только плоская схема:
+    Я решил что строку-пролог буду скипать. Сам парсер работает как и 2 других: текст в формате XML -> абстрактное дерево:
          <root>
              <entry key="..." type="bool || int || double || string">value</entry>
              ...

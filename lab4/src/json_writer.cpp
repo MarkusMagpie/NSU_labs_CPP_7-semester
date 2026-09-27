@@ -42,7 +42,7 @@ void write_double(double value, std::ostream& out) {
 }
 }  // namespace
 
-void write_json(const Value& value, std::ostream& out) {
+void write_json(const AbstractTreeNode& value, std::ostream& out) {
     if (value.is<bool>()) {
         out << (value.as<bool>() ? "true" : "false");
     } else if (value.is<int>()) {
@@ -53,7 +53,7 @@ void write_json(const Value& value, std::ostream& out) {
         write_escaped_string(value.as<std::string>(), out);
     } else if (value.is<Array>()) {
         out << '[';
-        const Array& items = value.as<Array>();
+        const auto& items = value.as<Array>();
         for (std::size_t i = 0; i < items.size(); ++i) {
             if (i != 0) out << ',';
             write_json(items[i], out);
@@ -61,7 +61,7 @@ void write_json(const Value& value, std::ostream& out) {
         out << ']';
     } else if (value.is<Object>()) {
         out << '{';
-        const Object& members = value.as<Object>();
+        const auto& members = value.as<Object>();
         for (std::size_t i = 0; i < members.size(); ++i) {
             if (i != 0) out << ',';
             write_escaped_string(members[i].first, out);

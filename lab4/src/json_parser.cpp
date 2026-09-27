@@ -74,9 +74,9 @@ public:
     // -----------------------------------------------------------------------------------------------------------------
     // скип пробелов, разобрать json, скип пробелов в конце, если после этого в тексте чтото осталось кидаю плотную ошибку
     // например "42 43" - не один JSON документ -> ошибка
-    Value parse() {
+    AbstractTreeNode parse() {
         skip_whitespace();
-        Value result = parse_value();
+        AbstractTreeNode result = parse_value();
         skip_whitespace();
 
         if (!eof()) {
@@ -87,25 +87,25 @@ public:
     }
 
     // -----------------------------------------------------------------------------------------------------------------
-    Value parse_value() {
+    AbstractTreeNode parse_value() {
         // не двигая курсор смотрит на один символ и по нему решает что вызывать дальше
         if (eof()) error("unexpected end of input, expected a value");
 
         char c = peek();
         if (c == '[') return parse_array();
         if (c == '{') return parse_object();
-        if (c == 't') return parse_keyword("true", Value(true));
-        if (c == 'f') return parse_keyword("false", Value(false));
+        if (c == 't') return parse_keyword("true", AbstractTreeNode(true));
+        if (c == 'f') return parse_keyword("false", AbstractTreeNode(false));
         if (c == '-' || std::isdigit(static_cast<unsigned char>(c))) {
             return parse_number();
         }
-        if (c == '"') return Value(parse_string_raw());
+        if (c == '"') return AbstractTreeNode(parse_string_raw());
 
         error(std::string("unexpected character '") + c + "'");
     }
 
     // '[' (value (',' value)*)? ']'
-    Value parse_array() {
+    AbstractTreeNode parse_array() {
         expect('[');
         Array items;
 
@@ -113,7 +113,7 @@ public:
 
         if (!eof() && text_[pos_] == ']') {
             advance(); // съесть ']'
-            return Value(items);
+            return AbstractTreeNode(items);
         }
 
         while (true) {
@@ -131,18 +131,18 @@ public:
         skip_whitespace();
         expect(']');
 
-        return Value(std::move(items));
+        return AbstractTreeNode(std::move(items));
     }
 
     // '{' (string ':' value (',' string ':' value)*)? '}'
-    Value parse_object() {
+    AbstractTreeNode parse_object() {
         expect('{');
         Object members;
 
         skip_whitespace();
         if (!eof() && peek() == '}') {
             advance();
-            return Value(members);
+            return AbstractTreeNode(members);
         }
 
         while (true) {
@@ -156,7 +156,7 @@ public:
             expect(':'); // сепаратор ключа и значения
             skip_whitespace();
 
-            Value value = parse_value();
+            AbstractTreeNode value = parse_value();
             members.emplace_back(std::move(key), std::move(value));
 
             skip_whitespace();
@@ -170,12 +170,12 @@ public:
         skip_whitespace();
         expect('}');
 
-        return Value(std::move(members));
+        return AbstractTreeNode(std::move(members));
     }
 
     // дальше в тексте идет "true"/"false"?
     // если да то возвращает заранее подготовленное значение
-    Value parse_keyword(std::string keyword, Value result) {
+    AbstractTreeNode parse_keyword(std::string keyword, AbstractTreeNode result) {
         // t->r->u->e и f->a->l->s->e
         for (char expected : keyword) {
             expect(expected); // text_[0] == 't'? -> advance ...
@@ -188,7 +188,7 @@ public:
     // -?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?
     // пример: -42.5e+3
     // встретил '.' или экспоненту -> double, иначе int
-    Value parse_number() {
+    AbstractTreeNode parse_number() {
         int start = pos_;
         bool is_double = false;
 
@@ -229,8 +229,8 @@ public:
 
         std::string literal(text_.substr(start, pos_ - start));
         try {
-            if (is_double) return Value(std::stod(literal)); // . или e/E -> StringToDouble: std::stod("-42.5e+3") -> -42500.0
-            return Value(std::stoi(literal));  // StringToInt
+            if (is_double) return AbstractTreeNode(std::stod(literal)); // . или e/E -> StringToDouble: std::stod("-42.5e+3") -> -42500.0
+            return AbstractTreeNode(std::stoi(literal));  // StringToInt
         } catch (const std::out_of_range&) {
             error("number literal is out of range: " + literal);
         }
@@ -278,7 +278,7 @@ public:
 
 
 // точка входа
-Value parse_json(std::string text) {
+AbstractTreeNode parse_json(std::string text) {
     JsonParser parser(text);
 
     return parser.parse();

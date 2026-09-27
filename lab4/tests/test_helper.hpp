@@ -9,12 +9,12 @@
 #include "parse_error.hpp"
 #include "toml_parser.hpp"
 #include "toml_writer.hpp"
-#include "value.hpp"
+#include "AbstractTreeNode.hpp"
 #include "xml_parser.hpp"
 #include "xml_writer.hpp"
 
 namespace {
-    std::string write_json_to_string(const lab4::Value& value) {
+    std::string write_json_to_string(const lab4::AbstractTreeNode& value) {
         std::ostringstream out;
         lab4::write_json(value, out);
 

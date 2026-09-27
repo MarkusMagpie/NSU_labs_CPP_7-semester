@@ -28,7 +28,7 @@ TEST_CASE("parse_json считывает ошибки в входном текс
 }
 
 TEST_CASE("parse_json читает одномерный массив (Array)", "[json]") {
-    lab4::Value v = lab4::parse_json("[1, 2, 3]");
+    lab4::AbstractTreeNode v = lab4::parse_json("[1, 2, 3]");
 
     REQUIRE(v.is<lab4::Array>());
     REQUIRE(v.as_array().size() == 3);
@@ -39,7 +39,7 @@ TEST_CASE("parse_json читает одномерный массив (Array)", "
 
 TEST_CASE("parse_json читает одномерный словарь (Object)", "[json]") {
     // Raw string literal для удобства записи json
-    lab4::Value v = lab4::parse_json(R"({"b": 1, "a": 2})"); // = "{\"b\": 1, \"a\": 2}"
+    lab4::AbstractTreeNode v = lab4::parse_json(R"({"b": 1, "a": 2})"); // = "{\"b\": 1, \"a\": 2}"
     REQUIRE(v.is_object());
 
     lab4::Object& obj = v.as<lab4::Object>();
@@ -51,7 +51,7 @@ TEST_CASE("parse_json читает одномерный словарь (Object)"
 }
 
 TEST_CASE("parse_json правильно читает вложенные массивы (Array) и словари (Object)", "[json]") {
-    lab4::Value v = lab4::parse_json(R"({"name": "Matvey", "grades": [4, 5, 5, 3], "address": {"city": "Berdsk"}})");
+    lab4::AbstractTreeNode v = lab4::parse_json(R"({"name": "Matvey", "grades": [4, 5, 5, 3], "address": {"city": "Berdsk"}})");
     REQUIRE(v.as_object()[0].second.as<std::string>() == "Matvey");
 
     lab4::Array& grades = v.as_object()[1].second.as_array();
@@ -80,27 +80,27 @@ TEST_CASE("parse_json считывает ошибки в массивах и с�
 
 // ТЕСТЫ JSON WRITER ---------------------------------------------------------------------------------------------------
 TEST_CASE("write_json пишет bool литералы", "[json][writer]") {
-    REQUIRE(write_json_to_string(lab4::Value(true)) == "true");
-    REQUIRE(write_json_to_string(lab4::Value(false)) == "false");
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(true)) == "true");
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(false)) == "false");
 }
 
 TEST_CASE("write_json пишет int литералы", "[json][writer]") {
-    REQUIRE(write_json_to_string(lab4::Value(0)) == "0");
-    REQUIRE(write_json_to_string(lab4::Value(100)) == "100");
-    REQUIRE(write_json_to_string(lab4::Value(-100)) == "-100");
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(0)) == "0");
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(100)) == "100");
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(-100)) == "-100");
 }
 
 TEST_CASE("write_json пишет double литералы и добавляет дробную часть", "[json][writer]") {
-    REQUIRE(write_json_to_string(lab4::Value(3.14)) == "3.14");
-    REQUIRE(write_json_to_string(lab4::Value(-1000.0)) == "-1000.0"); // проверка ветки text += ".0"
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(3.14)) == "3.14");
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(-1000.0)) == "-1000.0"); // проверка ветки text += ".0"
 }
 
 TEST_CASE("write_json экранирует спецсимволы строки", "[json][writer]") {
-    REQUIRE(write_json_to_string(lab4::Value(std::string("hello"))) == "\"hello\"");
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(std::string("hello"))) == "\"hello\"");
     // writer экранирует кваычку " в \". То есть на выходе 2 байта \ + " -> escape seq.: \\ + \"
-    REQUIRE(write_json_to_string(lab4::Value(std::string("a\"b"))) == R"("a\"b")"); // "\"a\\\"b\""
-    REQUIRE(write_json_to_string(lab4::Value(std::string("a\\b"))) == R"("a\\b")"); // a\b
-    REQUIRE(write_json_to_string(lab4::Value(std::string("a\nb"))) == R"("a\nb")");
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(std::string("a\"b"))) == R"("a\"b")"); // "\"a\\\"b\""
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(std::string("a\\b"))) == R"("a\\b")"); // a\b
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(std::string("a\nb"))) == R"("a\nb")");
 }
 
 TEST_CASE("write_json правильно пишет вложенные arrays + objects", "[json][writer]") {
@@ -109,18 +109,25 @@ TEST_CASE("write_json правильно пишет вложенные arrays + 
     grades.emplace_back(5);
 
     lab4::Object address;
-    address.emplace_back("city", lab4::Value(std::string("Berdsk")));
+    address.emplace_back("city", lab4::AbstractTreeNode(std::string("Berdsk")));
 
     lab4::Object root;
-    root.emplace_back("name", lab4::Value(std::string("Vasya")));
-    root.emplace_back("grades", lab4::Value(std::move(grades)));
-    root.emplace_back("address", lab4::Value(std::move(address)));
+    root.emplace_back("name", lab4::AbstractTreeNode(std::string("Vasya")));
+    root.emplace_back("grades", lab4::AbstractTreeNode(std::move(grades)));
+    root.emplace_back("address", lab4::AbstractTreeNode(std::move(address)));
 
-    REQUIRE(write_json_to_string(lab4::Value(std::move(root)))
+    REQUIRE(write_json_to_string(lab4::AbstractTreeNode(std::move(root)))
       == R"({"name":"Vasya","grades":[4,5],"address":{"city":"Berdsk"}})");
 }
 
 TEST_CASE("write_json(parse_json(x)) == x (оно же известно как round-trip)", "[json][writer]") {
     std::string origin = R"({"a":1,"b":[1,2,3],"c":{"d":true}})";
+    REQUIRE(write_json_to_string(lab4::parse_json(origin)) == origin);
+}
+
+TEST_CASE("write_json(parse_json(x)) == x для строки с escape-последовательностями", "[json][writer]") {
+    std::string origin = R"({"text":"a\"b\\c\nd"})";
+    // parse_json превратит \"->", \\->\, \n->переход строки: 7 байт в AbstractTreeNode
+    // write_json заново экранирует байты и получит исходный текст
     REQUIRE(write_json_to_string(lab4::parse_json(origin)) == origin);
 }

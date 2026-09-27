@@ -29,8 +29,8 @@ int main(int argc, char** argv) {
     std::string input = lab4::read_all(std::cin);
 
     try {
-        // ДЕСЕРИАЛИЗАЦИЯ: input_format -> Value
-        lab4::Value tree = [&]() -> lab4::Value {
+        // ДЕСЕРИАЛИЗАЦИЯ: input_format -> AbstractTreeNode
+        lab4::AbstractTreeNode tree = [&]() -> lab4::AbstractTreeNode {
             if (*input_format == lab4::Format::Json) {
                 return lab4::parse_json(input);
             }
@@ -41,7 +41,7 @@ int main(int argc, char** argv) {
         }(); // сразу лямбда функцию вызвал
 
         // Преобразование абстрактного дерева в заданный выходной формат представления = СЕРИАЛИЗАЦИЯ
-        // Value -> output_format
+        // AbstractTreeNode -> output_format
         if (*output_format == lab4::Format::Json) {
             lab4::write_json(tree, std::cout);
         } else if (*output_format == lab4::Format::Toml) {
@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
 
         return 1;
     } catch (const std::invalid_argument& e) {
-        // дерево Value несовместимо с выбранным выходным форматом
+        // дерево AbstractTreeNode несовместимо с выбранным выходным форматом
         std::cerr << "дерево несовместимо с выходным форматом: " << e.what() << "\n";
 
         return 1;

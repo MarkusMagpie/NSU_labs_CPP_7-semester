@@ -8,22 +8,21 @@
 #include <vector>
 
 namespace lab4 {
-class Value;
+class AbstractTreeNode;
 // Array=массив - упорядоченный список значений ([1,2,3]; ["a","b","c"], [1,"a",true])
-using Array = std::vector<Value>;
+using Array = std::vector<AbstractTreeNode>;
 // Object = Объект - упорядоченный список пар "ключ, значение": {"name": "vasya", "age": 20}
-using Object = std::vector<std::pair<std::string, Value>>;
-// Value = узел абстрактного дерева
-class Value {
+using Object = std::vector<std::pair<std::string, AbstractTreeNode>>;
+class AbstractTreeNode {
 public:
     using Storage = std::variant<bool, int, double, std::string, Array, Object>; // using=alias
 
-    Value(bool value);
-    Value(int value);
-    Value(double value);
-    Value(std::string value);
-    Value(Array value);
-    Value(Object value);
+    AbstractTreeNode(bool value);
+    AbstractTreeNode(int value);
+    AbstractTreeNode(double value);
+    AbstractTreeNode(std::string value);
+    AbstractTreeNode(Array value);
+    AbstractTreeNode(Object value);
 
     template<typename T>
     bool is() const {

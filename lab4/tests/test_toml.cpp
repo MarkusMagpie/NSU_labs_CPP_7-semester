@@ -2,13 +2,13 @@
 
 // ТЕСТЫ TOML ПАРСЕРА ---------------------------------------------------------------------------------------------------
 TEST_CASE("parse_toml читает bool литералы", "[toml]") {
-    lab4::Value value1 = lab4::parse_toml("a = true").as_object()[0].second;
+    lab4::AbstractTreeNode value1 = lab4::parse_toml("a = true").as_object()[0].second;
     REQUIRE(value1.as_bool() == true);
     REQUIRE(lab4::parse_toml("a = false").as_object()[0].second.as_bool() == false);
 }
 
 TEST_CASE("parse_toml читает int (включая ведущий '+', которого нет в JSON)", "[toml]") {
-    lab4::Value v = lab4::parse_toml("a = 0\nb = 100\nc = -100\nd = +5");
+    lab4::AbstractTreeNode v = lab4::parse_toml("a = 0\nb = 100\nc = -100\nd = +5");
     lab4::Object& obj = v.as_object();
 
     REQUIRE(obj[0].second.as_int() == 0);
@@ -18,7 +18,7 @@ TEST_CASE("parse_toml читает int (включая ведущий '+', ко�
 }
 
 TEST_CASE("parse_toml читает double", "[toml]") {
-    lab4::Value v = lab4::parse_toml("a = 3.14\nb = -1.0e3");
+    lab4::AbstractTreeNode v = lab4::parse_toml("a = 3.14\nb = -1.0e3");
     lab4::Object& obj = v.as_object();
 
     REQUIRE(obj[0].second.as_double() == 3.14);
@@ -26,7 +26,7 @@ TEST_CASE("parse_toml читает double", "[toml]") {
 }
 
 TEST_CASE("parse_toml читает string и экранированные спецсимволы", "[toml]") {
-    lab4::Value v = lab4::parse_toml("a = \"hello\"\nb = \"hello\\nworld\"");
+    lab4::AbstractTreeNode v = lab4::parse_toml("a = \"hello\"\nb = \"hello\\nworld\"");
     lab4::Object& obj = v.as_object();
 
     REQUIRE(obj[0].second.as_string() == "hello");
@@ -34,7 +34,7 @@ TEST_CASE("parse_toml читает string и экранированные спе
 }
 
 TEST_CASE("parse_toml игнорит пустые строки и комментарии + сохраняет порядок ключей", "[toml]") {
-    lab4::Value v = lab4::parse_toml("# comment\n\n   a = 1   # comment comment2\n\nb = 2");
+    lab4::AbstractTreeNode v = lab4::parse_toml("# comment\n\n   a = 1   # comment comment2\n\nb = 2");
     lab4::Object& obj = v.as_object();
 
     REQUIRE(obj.size() == 2);
@@ -45,7 +45,7 @@ TEST_CASE("parse_toml игнорит пустые строки и коммент
 }
 
 TEST_CASE("parse_toml поддерживает quoted key", "[toml]") {
-    lab4::Value v = lab4::parse_toml("\"my key\" = 1\nb = 2");
+    lab4::AbstractTreeNode v = lab4::parse_toml("\"my key\" = 1\nb = 2");
     lab4::Object& obj = v.as_object();
 
     REQUIRE(obj[0].first == "my key");

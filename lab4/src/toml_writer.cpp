@@ -62,7 +62,7 @@ void write_double(double value, std::ostream& out) {
 }
 
 // запись value
-void write_scalar(const Value& value, std::ostream& out) {
+void write_scalar(const AbstractTreeNode& value, std::ostream& out) {
     if (value.is<bool>()) {
         out << (value.as<bool>() ? "true" : "false");
     } else if (value.is<int>()) {
@@ -72,15 +72,14 @@ void write_scalar(const Value& value, std::ostream& out) {
     } else if (value.is<std::string>()) {
         write_escaped_string(value.as<std::string>(), out);
     } else {
-        throw std::invalid_argument(
-            "write_toml: gjrf yt gjllth;bdftnccz");
+        throw std::invalid_argument("write_toml: gjrf yt gjllth;bdftnccz");
     }
 }
 }  // namespace
 
-void write_toml(const Value& value, std::ostream& out) {
+void write_toml(const AbstractTreeNode& value, std::ostream& out) {
     if (!value.is<Object>()) {
-        throw std::invalid_argument("write_toml: value должен быть таблицей (тип данных Object)");
+        throw std::invalid_argument("write_toml: value должен быть пользовательского типа данных Object");
     }
 
     for (const auto& [key, member] : value.as<Object>()) {

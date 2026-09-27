@@ -185,16 +185,16 @@ public:
     }
 
     // имею атрибут type с его значением и данные элемента. "Во что превратить данные учитывая type?"
-    Value convert_entry_value(const std::string& type, const std::string& text) {
+    AbstractTreeNode convert_entry_value(const std::string& type, const std::string& text) {
         if (type == "bool") {
-            if (text == "true") return Value(true);
-            if (text == "false") return Value(false);
+            if (text == "true") return AbstractTreeNode(true);
+            if (text == "false") return AbstractTreeNode(false);
             error("invalid bool value '" + text + "', expected \"true\" or \"false\"");
         }
-        if (type == "int") return Value(parse_full_int(text));
-        if (type == "double") return Value(parse_full_double(text));
+        if (type == "int") return AbstractTreeNode(parse_full_int(text));
+        if (type == "double") return AbstractTreeNode(parse_full_double(text));
 
-        if (type == "string") return Value(text);
+        if (type == "string") return AbstractTreeNode(text);
 
         error("unknown type '" + type + "', expected bool/int/double/string");
     }
@@ -238,7 +238,7 @@ public:
         target.emplace_back(std::move(key), convert_entry_value(type, text));
     }
 
-    Value parse_value() {
+    AbstractTreeNode parse_value() {
         if (eof()) error("unexpected end of input, expected a value");
 
         skip_prolog_if_any();
@@ -255,13 +255,13 @@ public:
 
         expect_syntax("</root>");
 
-        return Value(std::move(root));
+        return AbstractTreeNode(std::move(root));
     }
 
     // -----------------------------------------------------------------------------------------------------------------
-    Value parse() {
+    AbstractTreeNode parse() {
         skip_whitespace();
-        Value result = parse_value();
+        AbstractTreeNode result = parse_value();
         skip_whitespace();
 
         if (!eof()) {
@@ -276,7 +276,7 @@ public:
 
 
 // точка входа
-Value parse_xml(std::string text) {
+AbstractTreeNode parse_xml(std::string text) {
     XmlParser parser(text);
 
     return parser.parse();

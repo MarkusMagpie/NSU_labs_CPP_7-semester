@@ -88,7 +88,7 @@ public:
 
     // -----------------------------------------------------------------------------------------------------------------
     // документ = (skip_blank_or_comment_lines key_value end_of_line)*
-    Value parse() {
+    AbstractTreeNode parse() {
         Object root;
 
         skip_blank_or_comment_lines();
@@ -98,7 +98,7 @@ public:
             skip_blank_or_comment_lines();
         }
 
-        return Value(std::move(root));
+        return AbstractTreeNode(std::move(root));
     }
 
     // после значения ожидается конец строки: необязательные пробелы, необязательный комментарий,
@@ -122,7 +122,7 @@ public:
         expect('=');
         skip_inline_whitespace();
 
-        Value value = parse_value();
+        AbstractTreeNode value = parse_value();
         target.emplace_back(std::move(key), std::move(value));
     }
 
@@ -137,9 +137,8 @@ public:
 
         // bare key
         std::size_t start = pos_; // ключ начинается здесь
-        // while жует символы один за другим пока каждый следующий: буква/цифра (isalnum) или _/-. Иначе - стоп
-        while (!eof() && (std::isalnum(static_cast<unsigned char>(text_[pos_]))
-                           || text_[pos_] == '_' || text_[pos_] == '-')) {
+        // while жует символы один за другим пока каждый следующий: буква/цифра (isalnum). Иначе - стоп
+        while (!eof() && (std::isalnum(static_cast<unsigned char>(text_[pos_])))) {
             advance(); // ++pos
         }
 
@@ -152,14 +151,14 @@ public:
     }
 
     // -----------------------------------------------------------------------------------------------------------------
-    // не двигая курсор смотрит на один символ и по нему решает что вызывать дальше
-    Value parse_value() {
+    AbstractTreeNode parse_value() {
         if (eof()) error("unexpected end of input, expected a value");
 
+        // не двигая курсор смотрит на один символ и по нему решает что вызывать дальше
         char c = peek();
-        if (c == '"') return Value(parse_string_raw());
-        if (c == 't') return parse_keyword("true", Value(true));
-        if (c == 'f') return parse_keyword("false", Value(false));
+        if (c == '"') return {parse_string_raw()};
+        if (c == 't') return parse_keyword("true", AbstractTreeNode(true));
+        if (c == 'f') return parse_keyword("false", AbstractTreeNode(false));
         if (c == '-' || c == '+' || std::isdigit(static_cast<unsigned char>(c))) {
             return parse_number();
         }
@@ -169,7 +168,7 @@ public:
 
     // дальше в тексте идет "true"/"false"?
     // если да то возвращает заранее подготовленное значение
-    Value parse_keyword(std::string_view keyword, Value result) {
+    AbstractTreeNode parse_keyword(std::string_view keyword, AbstractTreeNode result) {
         // t->r->u->e и f->a->l->s->e
         for (char expected : keyword) {
             expect(expected); // text_[0] == 't'? -> advance ...
@@ -183,7 +182,7 @@ public:
     // необязательный знак, затем обязательно хотя бы одна цифра (это целая часть),
     // затем необязательно . + цифры (дробная часть), затем необязательно e/E + необязательный знак + цифры (экспонента)
     // Отличие от JSON: разрешен ведущий '+'
-    Value parse_number() {
+    AbstractTreeNode parse_number() {
         std::size_t start = pos_;
         bool is_double = false;
 
@@ -228,10 +227,10 @@ public:
         std::string res(text_.substr(start, pos_ - start));
         try {
             if (is_double) {
-                return Value(std::stod(res)); // . или e/E -> StringToDouble
+                return AbstractTreeNode(std::stod(res)); // . или e/E -> StringToDouble
             }
 
-            return Value(std::stoi(res)); // StringToInt
+            return AbstractTreeNode(std::stoi(res)); // StringToInt
         } catch (const std::out_of_range&) {
             error("number literal is out of range: " + res);
         }
@@ -278,7 +277,7 @@ public:
 }  // namespace
 
 // точка входа
-Value parse_toml(std::string_view text) {
+AbstractTreeNode parse_toml(std::string_view text) {
     TomlParser parser(text);
 
     return parser.parse();
