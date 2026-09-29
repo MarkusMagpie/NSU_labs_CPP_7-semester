@@ -4,8 +4,10 @@
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <variant>
+// #include <variant>
 #include <vector>
+
+#include "CustomVariant.hpp"
 
 namespace lab4 {
 class AbstractTreeNode;
@@ -15,7 +17,8 @@ using Array = std::vector<AbstractTreeNode>;
 using Object = std::vector<std::pair<std::string, AbstractTreeNode>>;
 class AbstractTreeNode {
 public:
-    using Storage = std::variant<bool, int, double, std::string, Array, Object>; // using=alias
+    // using Storage = std::variant<bool, int, double, std::string, Array, Object>; // using=alias
+    using Storage = CustomVariant<bool, int, double, std::string, Array, Object>;
 
     AbstractTreeNode(bool value);
     AbstractTreeNode(int value);
@@ -26,17 +29,20 @@ public:
 
     template<typename T>
     bool is() const {
-        return std::holds_alternative<T>(data_); // содержит ли data_ тип T?
+        // return std::holds_alternative<T>(data_); // содержит ли data_ тип T?
+        return data_.holds_alternative<T>();
     }
 
     template<typename T>
     const T& as() const {
-        return std::get<T>(data_);
+        // return std::get<T>(data_);
+        return data_.get<T>();
     }
 
     template<typename T>
     T& as() {
-        return std::get<T>(data_);
+        // return std::get<T>(data_);
+        return data_.get<T>();
     }
 
     // старые именованные методы оставлены ради обратной совместимости в тестах

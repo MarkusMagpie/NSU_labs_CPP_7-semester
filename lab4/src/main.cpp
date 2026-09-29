@@ -1,6 +1,6 @@
 #include <iostream>
 #include <stdexcept>
-#include <variant>
+// #include <variant>
 #include "format.hpp"
 #include "io_utils.hpp"
 #include "json_parser.hpp"
@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
         std::cerr << "ошибка синтаксиса во входном документе: " << e.what() << "\n";
 
         return 1;
-    } catch (const std::bad_variant_access& e) {
+    } catch (const lab4::BadVariantAccess& e) {
         std::cerr << "внутренняя ошибка работы as<T>() (баг): " << e.what() << "\n";
 
         return 1;

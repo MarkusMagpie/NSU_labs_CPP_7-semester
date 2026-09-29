@@ -12,7 +12,7 @@ message(STATUS "WITH_TESTS: ${WITH_TESTS}")
 add_library(tree STATIC
     src/format.cpp
     src/io_utils.cpp
-        src/AbstractTreeNode.cpp
+    src/AbstractTreeNode.cpp
     src/parse_error.cpp
     src/json_parser.cpp
     src/json_writer.cpp

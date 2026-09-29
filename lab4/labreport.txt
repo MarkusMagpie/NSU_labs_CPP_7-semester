@@ -42,7 +42,7 @@
                 printf '<root>\n  <entry key="a" type="int">abc</entry>\n</root>\n' | ./res xml xml
                 // ошибка парсинга в line 2, column 40: инвалид int value 'abc'
         Вариант 2:
-            ./res json json < test.json
+            ./res json json < ../test.json
 
 
 
