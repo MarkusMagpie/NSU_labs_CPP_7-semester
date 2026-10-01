@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(lab4 CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(WITH_TESTS "Build unit tests (downloads Catch2 if not present)" OFF)

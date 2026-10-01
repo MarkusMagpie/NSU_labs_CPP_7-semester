@@ -6,6 +6,7 @@
 #include <stdexcept> // std::logic_error
 #include <type_traits>  // std::is_same_v
 #include <utility> // std::move
+#include <concepts> // std::same_as
 
 namespace lab4 {
 
@@ -55,11 +56,9 @@ public:
     }
 
     // конструктор из значения: CustomVariant<bool, int, std::string> v(42); -> внутри лежит int
-    // T выводится из типа аргумента
-    template <typename T>
+    // T выводится из типа аргумента; requires - конструктор существует только для T из списка Types
+    template <typename T> requires (std::same_as<T, Types> || ...)
     CustomVariant(T value) {
-        static_assert(index_of<T>() < sizeof...(Types), "CustomVariant: этого типа нет в списке Types");
-
         // new T(std::move(value));
         new (buffer_) T(std::move(value)); // память не выделять; создать объект value в байтах buffer_
         index_ = index_of<T>();
@@ -93,15 +92,13 @@ public:
     }
 
     // лежит ли сейчас тип T? (std::holds_alternative 2.0)
-    template <typename T>
+    template <typename T> requires (std::same_as<T, Types> || ...)
     [[nodiscard]] bool holds_alternative() const {
-        static_assert(index_of<T>() < sizeof...(Types), "CustomVariant: этого типа нет в списке Types");
-
         return index_ == index_of<T>();
     }
 
     // достать значение типа T (std::get 2.0); если другой тип -> BadVariantAccess
-    template <typename T>
+    template <typename T> requires (std::same_as<T, Types> || ...)
     T& get() {
         if (!holds_alternative<T>()) {
             throw BadVariantAccess();
@@ -111,7 +108,7 @@ public:
         return *reinterpret_cast<T*>(buffer_);
     }
 
-    template <typename T>
+    template <typename T> requires (std::same_as<T, Types> || ...)
     const T& get() const {
         if (!holds_alternative<T>()) {
             throw BadVariantAccess();
