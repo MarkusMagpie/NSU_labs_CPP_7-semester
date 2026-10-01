@@ -6,7 +6,7 @@
 
 #include "CustomVariant.hpp"
 
-using Variant = lab4::CustomVariant<int, std::string>;
+using Variant = lab4::CustomVariant<int, std::string, float>;
 
 int main() {
     Variant a(42);

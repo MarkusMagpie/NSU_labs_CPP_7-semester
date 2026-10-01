@@ -17,15 +17,31 @@ public:
 
 
 
+/**
+   * @brief Упрощенный аналог std::variant: хранит ровно одно значение одного из типов Types...
+   *
+   * Значение лежит внутри объекта, в буфере buffer_, без выделения памяти в куче.
+   * Поле index_ хранит индекс типа который там лежит сейчас (номер типа в списке Types).
+   * Сам список типов во время работы не хранится: его знает только компилятор.
+   *
+   * @tparam Types список допустимых типов данных. Например: bool, int, std::string.
+   */
 template <typename... Types>
 class CustomVariant {
 private:
-    alignas(Types...) unsigned char buffer_[std::max({sizeof(Types)...})]; // sizeof(Types)=sizeof(bool), sizeof(int), ...
+    // сырые байты под одно значение типа T
+    alignas(Types...) unsigned char buffer_[std::max({sizeof(Types)...})];
     // номер типа который сейчас лежит в buffer_
     std::size_t index_;
 public:
-    // на каком месте тип T стоит в списке Types? (bool=0,int=1,...)
-    // если T в списке нет -> к-во типов
+    /**
+     * @brief Номер типа T в списке Types. Вычисляется при компиляции.
+     *
+     * Пример: для CustomVariant<bool, int, std::string> index_of<int>() == 1.
+     *
+     * @tparam T тип, который ищется
+     * @return позиция T в Types; если T в списке нет, возвращает количество типов данных (sizeof...(Types))
+     */
     template <typename T>
     static constexpr std::size_t index_of() {
         bool matches[] = { std::is_same_v<T, Types>... }; // bool array
@@ -45,13 +61,26 @@ public:
         static_assert(index_of<T>() < sizeof...(Types), "CustomVariant: этого типа нет в списке Types");
 
         // new T(std::move(value));
-        new (buffer_) T(std::move(value)); // память не выделять а создать объект value в buffer_
+        new (buffer_) T(std::move(value)); // память не выделять; создать объект value в байтах buffer_
         index_ = index_of<T>();
     }
 
-    // копирующий конструктор CustomVariant a = b;
+    // копирующий конструктор CustomVariant a = b; 1 - скопировать index_; 2 - содержимое буфера
     CustomVariant(const CustomVariant& other) : index_(other.index_) {
         (copy_if<Types>(other), ...);
+    }
+
+    /**
+     * @brief Если в other лежит тип T, то метод создает в своем buffer_ копию этого объекта.
+     *
+     * @tparam T тип из списка Types, который сравнивается с типом, хранящимся в other
+     * @param other объект CustomVariant, из buffer_ которого берется объект, копия которого строится в моем buffer_
+     */
+    template <typename T>
+    void copy_if(const CustomVariant& other) {
+        if (other.index_ == index_of<T>()) {
+            new (buffer_) T(other.get<T>()); // копирующий конструктор T: у копии свои данные
+        }
     }
 
     ~CustomVariant() {
@@ -91,7 +120,13 @@ public:
         return *reinterpret_cast<const T*>(buffer_);
     }
 
-    // уничтожить объект в buffer_ если там лежит T
+    /**
+     * @brief Если в buffer_ лежит объект типа T, то явно вызывается деструктор ~T().
+     *
+     *
+     * @tparam T тип из списка Types, который сравнивается с типом, хранящимся сейчас.
+     *  Если совпал, вызывается ~T(); если нет, ничего не происходит
+     */
     template <typename T>
     void destroy_if() {
         if (index_ == index_of<T>()) {
@@ -102,14 +137,6 @@ public:
     // уничтожить объект в buffer_
     void destroy() {
         (destroy_if<Types>(), ...);
-    }
-
-    // если в other лежит T -> создать в своем buffer_ копию объекта T
-    template <typename T>
-    void copy_if(const CustomVariant& other) {
-        if (other.index_ == index_of<T>()) {
-            new (buffer_) T(other.get<T>()); // копирующий конструктор T: у копии свои данные
-        }
     }
 };
 
