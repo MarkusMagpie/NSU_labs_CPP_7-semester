@@ -1,0 +1,70 @@
+Генерация .clang-tidy:
+    clang-tidy -dump-config > .clang-tidy
+
+Форматирование файлов утилитой clang-format:
+    clang-format -i main.cpp
+    clang-format -i *.cpp *.hpp
+
+---
+conanfile — конфигурационный файл для Conan (менеджера пакетов для C и C++).
+    В моем случае он помогает с автоматизацией зависимостей. То есть больше не нужно вручную скачивать исходники
+        библиотек, компилировать их и прописывать пути к заголовочным файлам.
+    Я с его помощью подключаю библиотеки внешних зависимостей к проекту.
+---
+Doxygen - программа для автоматической генерации документации из исходного кода программ.
+    Читает комментарии в коде и создает справочную документацию в разных форматах.
+---
+
+Перед сборкой единожды нужно было установить Conan и создать профиль:
+    sudo apt install pipx
+    pipx install conan
+    conan profile detect
+Сборка:
+    cd /home/matvey/CLionProjects/NSU_labs_CPP_7-semester/lab1
+    conan install . --build=missing
+        // читает conanfile.txt и создает файлы в build/Release/generators/ для сборки в преокте этих зависимостей
+    cmake --preset conan-release
+    cmake --build --preset conan-release
+        или cmake --build build/Release
+        или cd build/Release && cmake --build .
+Установка:
+    cmake --install build/Release --prefix install
+Запуск тестов (после сборки):
+    ctest --preset conan-release -V
+        или ctest --test-dir build/Release --output-on-failure
+        ПОСЛЕ запуска тестов проверить появление build/Release/test_results.xml
+Запуск экзешника compressor:
+    ./build/Release/compressor/compressor zlib test_string
+        Вывод: 789c2b492d2e892f2e29cacc4b07001c7904b7
+    ./build/Release/compressor/compressor bzip test_string
+        Вывод: 425a68313141592653594a7c69050000048380000082a11c00200022036884302250df0499e2ee48a70a12094f8d20a0
+    ./build/Release/compressor/compressor zovzov test_string
+        Вывод: [2026-10-02 14:51:24.478] [compressor] [error] Ожидались значения алгоритмов zlib или bzip. Получен: zovzov
+
+
+
+ТЗ: Уметь запускать форматирование согласно файлу clang-format
+    cd /home/matvey/CLionProjects/NSU_labs_CPP_7-semester/lab1
+    clang-format -i compressor/src/*.cpp libcompressor/src/*.cpp libcompressor/include/libcompressor/*.hpp libcompressor/tests/*.cpp
+
+ТЗ: уметь запускать clang-tidy с настройками из файла
+    cd /home/matvey/CLionProjects/NSU_labs_CPP_7-semester/lab1
+    clang-tidy -p build/Release libcompressor/src/libcompressor.cpp compressor/src/compressor.cpp libcompressor/tests/libcompressortest.cpp
+
+ТЗ: Уметь генерировать документацию библиотеки инструментом Doxygen
+    sudo apt install doxygen
+    cmake --preset conan-release
+    cmake --build --preset conan-release --target docs
+        // Ранее цели собирались дефолтные: libcompressor, compressor, libcompressortest, а теперь ставится только 1: docs.
+        // см. /home/matvey/CLionProjects/NSU_labs_CPP_7-semester/lab1/build/Release/docs/html/index.html
+
+В репозитории должен быть подготовленный pipeline GitHub Actions, который прогоняет этапы сборки проекта.
+    Папка workflow должна лежать в корне репозитория: NSU_labs_CPP_7-semester/.github/workflows/lab1.yml, а не в lab1/. Внутри шаги с working-directory: lab1:
+      1. checkout;
+      2. установка Conan;
+      3. conan profile detect;
+      4. conan install;
+      5. cmake --preset;
+      6. cmake --build;
+      7. ctest.
+

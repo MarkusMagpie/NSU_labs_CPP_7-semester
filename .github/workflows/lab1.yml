@@ -1,0 +1,49 @@
+name: lab1
+
+on:
+  push:
+    paths: ['lab1/**', '.github/workflows/lab1.yml']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lab1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: set up Python для Conan
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Conan
+        run: pip install conan
+
+      - name: conan profile detect
+        run: conan profile detect
+
+      - name: Install dependencies (= conan install . --build=missing)
+        run: conan install . --build=missing
+
+      - name: CMake Configure (= cmake --preset conan-release )
+        run: cmake --preset conan-release
+
+      - name: CMake Build (= cmake --build --preset conan-release )
+        run: cmake --build --preset conan-release
+
+      - name: Юнит-тесты
+        run: ctest --preset conan-release --output-on-failure
+
+      - name: Install static lib and executable (= cmake --install build/Release --prefix install)
+        run: cmake --install build/Release --prefix install
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: lab1/build/Release/test_results.xml
