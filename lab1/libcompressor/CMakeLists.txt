@@ -9,8 +9,7 @@ target_include_directories(libcompressor PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
-target_link_libraries(libcompressor PRIVATE ZLIB::ZLIB
-        BZip2::BZip2)
+target_link_libraries(libcompressor PRIVATE ZLIB::ZLIB BZip2::BZip2)
 
 target_compile_features(libcompressor PRIVATE cxx_std_20)
 if(MSVC)

@@ -31,7 +31,7 @@ Doxygen - программа для автоматической генерац�
     cmake --install build/Release --prefix install
 Запуск тестов (после сборки):
     ctest --preset conan-release -V
-        или ctest --test-dir build/Release --output-on-failure
+        или ./build/Release/libcompressor/tests/libcompressortest
         ПОСЛЕ запуска тестов проверить появление build/Release/test_results.xml
 Запуск экзешника compressor:
     ./build/Release/compressor/compressor zlib test_string
@@ -68,3 +68,4 @@ Doxygen - программа для автоматической генерац�
       6. cmake --build;
       7. ctest.
 
+результат пайплайна github actions: https://github.com/MarkusMagpie/NSU_labs_CPP_7-semester/actions/runs/36985005324
