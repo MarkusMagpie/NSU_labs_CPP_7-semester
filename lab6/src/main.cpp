@@ -1,9 +1,14 @@
 #include <iostream>
 #include <string_view>
 
+#include <Warehouse.h>
 #include <model/Order.h>
 #include <model/StorageAddress.h>
 #include <model/Truck.h>
+#include <tasks/InventoryTask.h>
+#include <tasks/PickingTask.h>
+#include <tasks/TaskQueue.h>
+#include <tasks/UnloadTask.h>
 #include <utils/Config.h>
 #include <utils/RandomGenerator.h>
 
@@ -39,7 +44,21 @@ int main(int argc, char* argv[]) {
     std::cout << order;
 
     StorageAddress address{3, 2, 7};
-    std::cout << "Пример адреса палетты: " << address << '\n';
+    std::cout << "Пример адреса палетты: " << address << "\n\n";
+
+    Warehouse warehouse(config);
+    std::cout << '\n';
+
+    TaskQueue queue;
+    queue.push(std::make_shared<UnloadTask>(truck));
+    queue.push(std::make_shared<InventoryTask>(std::vector<ProductType>{ProductType::Light, ProductType::Heavy}));
+    queue.push(std::make_shared<PickingTask>(order, 2));
+    std::cout << "задач в очереди: " << queue.size() << '\n';
+    while (std::shared_ptr<Task> task = queue.tryPop()) {
+        std::cout << "[" << task->name() << "] ";
+        task->execute();
+    }
+    std::cout << "задач в очереди: " << queue.size() << '\n';
 
     return 0;
 }

@@ -11,6 +11,17 @@ find_package(Threads REQUIRED)
 
 set(SOURCES
     src/main.cpp
+    src/Warehouse.cpp
+
+    src/zones/ReceivingDock.cpp
+    src/zones/StorageZone.cpp
+    src/zones/PackingZone.cpp
+    src/zones/ShippingZone.cpp
+    
+    src/tasks/TaskQueue.cpp
+    src/tasks/UnloadTask.cpp
+    src/tasks/InventoryTask.cpp
+    src/tasks/PickingTask.cpp
     src/utils/RandomGenerator.cpp
     src/utils/Config.cpp
     src/model/ProductType.cpp
