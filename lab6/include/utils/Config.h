@@ -43,6 +43,8 @@ namespace limits {
 
     // ЗАКАЗЫ: всего городов от 3 до 5
     inline int kMinCities = 3, kMaxCities = 5;
+    // ---количество единиц каждого вида товара в заказе: в ТЗ нет
+    inline int kMinOrderItems = 1, kMaxOrderItems = 20;
 
     // ГРУЗЧИКИ: может работать от 2 до 250 грузчиков
     inline int kMinLoaders = 2, kMaxLoaders = 250;

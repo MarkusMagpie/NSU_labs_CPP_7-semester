@@ -3,4 +3,5 @@
     rm -rf build && mkdir build && cd build
     cmake ..
     cmake --build . --parallel 8
-    ./lab6 --fast
+    ./lab6
+        или ./lab6 -fast

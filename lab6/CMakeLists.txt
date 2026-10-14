@@ -13,6 +13,11 @@ set(SOURCES
     src/main.cpp
     src/utils/RandomGenerator.cpp
     src/utils/Config.cpp
+    src/model/ProductType.cpp
+    src/model/Pallet.cpp
+    src/model/Truck.cpp
+    src/model/StorageAddress.cpp
+    src/model/Order.cpp
 )
 
 add_executable(lab6 ${SOURCES})
