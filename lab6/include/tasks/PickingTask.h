@@ -11,6 +11,6 @@ private:
 public:
     PickingTask(const Order& order, int maxLoaders);
 
-    void execute() override;
+    void execute(Loader& loader) override;
     std::string name() const override;
 };

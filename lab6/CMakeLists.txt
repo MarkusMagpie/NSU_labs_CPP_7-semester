@@ -29,6 +29,8 @@ set(SOURCES
     src/model/Truck.cpp
     src/model/StorageAddress.cpp
     src/model/Order.cpp
+    src/workers/Loader.cpp
+    src/workers/Manager.cpp
 )
 
 add_executable(lab6 ${SOURCES})

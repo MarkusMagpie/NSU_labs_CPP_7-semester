@@ -8,6 +8,7 @@ using namespace limits;
 
 StorageZone::StorageZone(int rackCount, int terminalCount) : terminalCount_(terminalCount) {
     auto gen = RandomGenerator::getGenerator();
+    // заполняю вектор информацией о рандомном к-ве полок на каждом стеллаже
     for (int i = 0; i < rackCount; ++i) {
         shelvesPerRack_.push_back(RandomGenerator::getRandom(gen, kMinShelvesPerRack, kMaxShelvesPerRack));
     }

@@ -23,6 +23,14 @@ Config Config::generate(bool fastMode) {
     return config;
 }
 
+std::chrono::milliseconds Config::timeUnit() {
+    if (fastMode) {
+        return std::chrono::milliseconds(1);
+    }
+    
+    return std::chrono::milliseconds(1000);
+}
+
 std::ostream& operator<<(std::ostream& os, const Config& config) {
     os << "Конфигурация склада:\n"
         << " Режим: " << (config.fastMode ? "быстрый (мс)" : "обычный (с)") << '\n'

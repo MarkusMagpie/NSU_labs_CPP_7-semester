@@ -14,7 +14,7 @@ PackingZone::PackingZone(int tableCount) {
 
     std::cout << "Зона упаковки создана: " << tableCount << " столов комплектации\n";
     for (int i = 0; i < tableCount; ++i) {
-        std::cout << " стол " << i << ": " << sortSlotsPerTable_[i] << " слотов для разбора, "
+        std::cout << "  стол " << i << ": " << sortSlotsPerTable_[i] << " слотов для разбора, "
                 << kTablePackSlots << " для упаковки\n";
     }
 }

@@ -12,6 +12,6 @@ private:
 public:
     explicit InventoryTask(const std::vector<ProductType>& types);
 
-    void execute() override;
+    void execute(Loader& loader) override;
     std::string name() const override;
 };

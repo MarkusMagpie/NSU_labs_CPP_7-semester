@@ -72,6 +72,9 @@ struct Config {
     int managers = 0;
 
     static Config generate(bool fastMode);
+
+    // одна единица времени: 1 секунда в обычном режиме, 1 миллисекунда в быстром
+    std::chrono::milliseconds timeUnit();
 };
 
 std::ostream& operator<<(std::ostream& os, const Config& config);

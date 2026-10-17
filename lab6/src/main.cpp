@@ -11,6 +11,7 @@
 #include <tasks/UnloadTask.h>
 #include <utils/Config.h>
 #include <utils/RandomGenerator.h>
+#include <workers/Loader.h>
 
 // проверка из ТЗ: от 10 до 100 паллет, на каждой от 1 до palletCapacity единиц
 bool isTruckValid(const Truck& truck) {
@@ -54,9 +55,11 @@ int main(int argc, char* argv[]) {
     queue.push(std::make_shared<InventoryTask>(std::vector<ProductType>{ProductType::Light, ProductType::Heavy}));
     queue.push(std::make_shared<PickingTask>(order, 2));
     std::cout << "задач в очереди: " << queue.size() << '\n';
+    // тестовый грузчик: одно действие длится 1 единицу времени
+    Loader loader(0, config.timeUnit());
     while (std::shared_ptr<Task> task = queue.tryPop()) {
         std::cout << "[" << task->name() << "] ";
-        task->execute();
+        task->execute(loader);
     }
     std::cout << "задач в очереди: " << queue.size() << '\n';
 
