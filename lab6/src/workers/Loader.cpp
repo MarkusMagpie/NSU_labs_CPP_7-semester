@@ -3,7 +3,12 @@
 #include <utils/Logger.h>
 #include <workers/Loader.h>
 
-Loader::Loader(int id, std::chrono::milliseconds actionTime) : id_(id), actionTime_(actionTime) {}
+Loader::Loader(int id, std::chrono::milliseconds actionTime, 
+    std::chrono::milliseconds restTime, TaskQueue& queue)
+    : id_(id), 
+    actionTime_(actionTime), 
+    restTime_(restTime), 
+    queue_(queue) {}
 
 int Loader::id() const {
     return id_;
@@ -39,8 +44,15 @@ void Loader::run(std::stop_token stopToken) {
 
     // пока никто не попросил остановиться
     while (!stopToken.stop_requested()) {
-        Logger::log("Грузчик #" + std::to_string(id_) + " отдыхает");
-        std::this_thread::sleep_for(actionTime_);
+        // ждем задачу не дольше restTime_; pop вернется сразу, если задача появится или попросят остановиться
+        std::shared_ptr<Task> task = queue_.pop(stopToken, restTime_);
+
+        if (task) {
+            task->execute(*this);
+        } else if (!stopToken.stop_requested()) {
+            // nullptr не из-за остановки -> задач не было все время restTime_
+            Logger::log("Грузчик #" + std::to_string(id_) + " отдохнул: задач не было");
+        }
     }
 
     Logger::log("Грузчик #" + std::to_string(id_) + " закончил смену");

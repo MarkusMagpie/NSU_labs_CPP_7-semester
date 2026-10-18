@@ -1,7 +1,6 @@
 #pragma once
 
-#include <memory>
-#include <vector>
+#include <deque>
 
 #include <tasks/TaskQueue.h>
 #include <utils/Config.h>
@@ -22,12 +21,10 @@ private:
     PackingZone packingZone_;
     ShippingZone shippingZone_;
     
-    TaskQueue taskQueue_; // общая очередь задач для всех грузчиков
+    TaskQueue taskQueue_;
 
-    // при росте вектора будут переезжать указатели,
-    // а объекты Loader останутся на прежних местах в куче
-    std::vector<std::unique_ptr<Loader>> loaders_;
-    std::vector<std::unique_ptr<Manager>> managers_;
+    std::deque<Loader> loaders_;
+    std::deque<Manager> managers_;
 public:
     Warehouse(Config& config);
 
@@ -35,4 +32,7 @@ public:
     void start();
     // попросить рабочих остановиться и дождаться завершения всех потоков
     void stop();
+
+    // общая очередь задач (пока нужна main для проверки, позже задачи будут ставить менеджеры)
+    TaskQueue& taskQueue();
 };

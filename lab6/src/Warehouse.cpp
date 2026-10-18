@@ -14,18 +14,23 @@ Warehouse::Warehouse(Config& config)
       shippingZone_(config.shippingSlots) {
     auto gen = RandomGenerator::getGenerator();
 
+    // отдых грузчика по ТЗ равен максимальному времени выполнения одной задачи;
+    // пока задача-заглушка = одно действие, а действие длится максимум kMaxActionTime единиц
+    auto restTime = config.timeUnit() * kMaxActionTime;
+
     // определение скорости действий каждого грузчика
-    for (int i = 0; i < config.loaders; ++i) {
+    for (int id = 0; id < config.loaders; ++id) {
         int units = RandomGenerator::getRandom(gen, kMinActionTime, kMaxActionTime);
-        loaders_.push_back(std::make_unique<Loader>(i, config.timeUnit() * units));
+        // emplace_back создает Loader прямо внутри deque из этих аргументов, без копирования
+        loaders_.emplace_back(id, config.timeUnit() * units, restTime, taskQueue_);
     }
     std::cout << "Создано грузчиков: " << loaders_.size()
-              << " (например у грузчика #0 действие длится " << loaders_[0]->actionTime().count() << " мс)\n";
+              << " (например у грузчика #0 действие длится " << loaders_[0].actionTime().count() << " мс)\n";
 
     // как часто менеджер ставит задачи, в ТЗ не задано: беру тот же диапазон 1-5 единиц времени
-    for (int i = 0; i < config.managers; ++i) {
+    for (int id = 0; id < config.managers; ++id) {
         int units = RandomGenerator::getRandom(gen, kMinActionTime, kMaxActionTime);
-        managers_.push_back(std::make_unique<Manager>(i, config.timeUnit() * units));
+        managers_.emplace_back(id, config.timeUnit() * units, config.cities, taskQueue_);
     }
     std::cout << "Создано менеджеров: " << managers_.size() << '\n';
 
@@ -35,11 +40,11 @@ Warehouse::Warehouse(Config& config)
 void Warehouse::start() {
     Logger::log("=== Склад начинает работу ===");
     for (auto& manager : managers_) {
-        manager->start_thread();
+        manager.start_thread();
     }
 
     for (auto& loader : loaders_) {
-        loader->start_thread();
+        loader.start_thread();
     }
 }
 
@@ -48,19 +53,23 @@ void Warehouse::stop() {
 
     // одновременно прошу всех рабочих остановиться
     for (auto& manager : managers_) {
-        manager->request_stop();
+        manager.request_stop();
     }
     for (auto& loader : loaders_) {
-        loader->request_stop();
+        loader.request_stop();
     }
 
     // main ждет в порядке массива завершения работы потока
     for (auto& manager : managers_) {
-        manager->join();
+        manager.join();
     }
     for (auto& loader : loaders_) {
-        loader->join();
+        loader.join();
     }
 
     Logger::log("=== Склад остановлен: все потоки завершены ===");
+}
+
+TaskQueue& Warehouse::taskQueue() {
+    return taskQueue_;
 }

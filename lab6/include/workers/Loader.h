@@ -4,18 +4,21 @@
 #include <stop_token>
 #include <thread>
 
+#include <tasks/TaskQueue.h>
+
 // ГРУЗЧИК: берет задачи из общей очереди и выполняет их
 class Loader {
 private:
     int id_; // номер грузчика
     std::chrono::milliseconds actionTime_; // сколько длится одно действие (1-5 единиц времени)
+    std::chrono::milliseconds restTime_; // сколько грузчик ждет задачу
+    TaskQueue& queue_; // очередь задач склада (от Warehouse)
     std::jthread thread_;
 public:
-    Loader(int id, std::chrono::milliseconds actionTime);
-
-    // грузчика нельзя копировать; так бы копировался поток
-    Loader(const Loader&) = delete;
-    Loader& operator=(const Loader&) = delete;
+    Loader(int id, 
+        std::chrono::milliseconds actionTime, 
+        std::chrono::milliseconds restTime, 
+        TaskQueue& queue);
 
     int id() const;
     std::chrono::milliseconds actionTime() const;
