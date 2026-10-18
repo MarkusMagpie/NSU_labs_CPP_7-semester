@@ -10,6 +10,7 @@
 #include <tasks/TaskQueue.h>
 #include <tasks/UnloadTask.h>
 #include <utils/Config.h>
+#include <utils/Logger.h>
 #include <utils/RandomGenerator.h>
 #include <workers/Loader.h>
 
@@ -61,7 +62,11 @@ int main(int argc, char* argv[]) {
         std::cout << "[" << task->name() << "] ";
         task->execute(loader);
     }
-    std::cout << "задач в очереди: " << queue.size() << '\n';
+    std::cout << "задач в очереди: " << queue.size() << "\n\n";
+
+    warehouse.start();
+    std::this_thread::sleep_for(config.timeUnit() * 10);
+    warehouse.stop();
 
     return 0;
 }

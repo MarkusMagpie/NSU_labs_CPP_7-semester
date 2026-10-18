@@ -24,6 +24,7 @@ set(SOURCES
     src/tasks/PickingTask.cpp
     src/utils/RandomGenerator.cpp
     src/utils/Config.cpp
+    src/utils/Logger.cpp
     src/model/ProductType.cpp
     src/model/Pallet.cpp
     src/model/Truck.cpp

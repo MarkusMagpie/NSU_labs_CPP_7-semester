@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include <tasks/TaskQueue.h>
@@ -21,10 +22,17 @@ private:
     PackingZone packingZone_;
     ShippingZone shippingZone_;
     
-    TaskQueue taskQueue_;  // общая очередь задач для всех грузчиков
+    TaskQueue taskQueue_; // общая очередь задач для всех грузчиков
 
-    std::vector<Loader> loaders_;
-    std::vector<Manager> managers_;
+    // при росте вектора будут переезжать указатели,
+    // а объекты Loader останутся на прежних местах в куче
+    std::vector<std::unique_ptr<Loader>> loaders_;
+    std::vector<std::unique_ptr<Manager>> managers_;
 public:
     Warehouse(Config& config);
+
+    // запустить потоки рабочих
+    void start();
+    // попросить рабочих остановиться и дождаться завершения всех потоков
+    void stop();
 };
