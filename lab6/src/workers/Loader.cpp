@@ -53,6 +53,11 @@ void Loader::run(std::stop_token stopToken) {
         std::shared_ptr<Task> task = queue_.pop(stopToken, restTime_);
 
         if (task) {
+            // задаче нужны еще грузчики (в машине остались невзятые паллеты)?
+            // тогда push обратно в очередь; следующий свободный грузчик присоединится
+            if (task->needsMoreLoaders()) {
+                queue_.push(task);
+            }
             task->execute(*this);
         } else if (!stopToken.stop_requested()) {
             // nullptr не из-за остановки -> задач не было все время restTime_

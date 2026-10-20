@@ -43,12 +43,27 @@ void UnloadTask::execute(Loader& loader) {
         }
 
         // 1 взять товар на паллете из машины
+        // зайти в машину = занять один из 3 "пропусков"; если внутри уже трое то ждать пока выйдет один
+        truckDoor_.acquire();
+        int inside = ++insideTruck_;
+        if (inside > 3) {
+            Logger::log("ОШИБКА: в машине " + std::to_string(truck_.id) + "; в ней одновременно " + std::to_string(inside) + " грузчиков (>3)");
+        }
+
         std::optional<Pallet> taken = takePallet();
+        // берет паллету находясь в машине
+        if (taken) {
+            std::this_thread::sleep_for(loader.actionTime());
+        }
+
+        // выйти из машины = вернуть "пропуск"
+        --insideTruck_;
+        truckDoor_.release();
+
         if (!taken) {
             break; // невзятых паллет не осталось
         }
         const Pallet& pallet = *taken;
-        std::this_thread::sleep_for(loader.actionTime());
 
         // 2 на терминале ввести вид и количество -> получить адрес(а) хранения
         std::vector<StorageZone::Placement> placements = storage_.requestPlacement(pallet.type, pallet.count);
@@ -65,7 +80,8 @@ void UnloadTask::execute(Loader& loader) {
 
         // лог: какой грузчик что куда положил
         std::ostringstream message;
-        message << who << " разместил паллету из " << truckName << " (" << pallet << "):";
+        message << who << " разместил паллету из " << truckName << " (" << pallet 
+            << ", в машине было грузчиков: " << inside << "):";
         int placed = 0;
         for (const StorageZone::Placement& placement : placements) {
             message << ' ' << placement.address << " -> " << placement.count;
@@ -84,6 +100,12 @@ void UnloadTask::execute(Loader& loader) {
     }
 
     Logger::log(who + " закончил работу с " + truckName + ": невзятых паллет не осталось");
+}
+
+bool UnloadTask::needsMoreLoaders() {
+    std::lock_guard<std::mutex> lock(pallet_mutex_);
+
+    return nextPallet_ < static_cast<int>(truck_.pallets.size());
 }
 
 std::string UnloadTask::name() const {
