@@ -17,7 +17,8 @@ Manager::Manager(int id,
     std::chrono::milliseconds period,
     int cities,
     TaskQueue& queue,
-    StorageZone& storage) : id_(id), period_(period), cities_(cities), queue_(queue), storage_(storage) {}
+    ReceivingDock& dock,
+    StorageZone& storage) : id_(id), period_(period), cities_(cities), queue_(queue), dock_(dock), storage_(storage) {}
 
 int Manager::id() const {
     return id_;
@@ -41,20 +42,30 @@ void Manager::join() {
     }
 }
 
-std::shared_ptr<Task> Manager::createRandomTask(std::mt19937& gen) {
+std::shared_ptr<Task> Manager::createRandomTask(std::mt19937& gen, std::stop_token stopToken) {
     std::string who = "Менеджер #" + std::to_string(id_);
 
     int number = nextId_++;
 
     switch (RandomGenerator::getRandom(gen, 0, 2)) {
         case 0: {
+            // сначала машина должна встать в свободный слот приемки
+            int slot = dock_.occupySlot(stopToken, period_);
+            if (slot < 0) {
+                Logger::log(who + ": машина #" + std::to_string(number)
+                    + " не смогла встать на разгрузку так как все слоты зоны приемки заняты");
+                return nullptr;
+            }
+
             Truck truck = Truck::generate(number, gen);
             Logger::log(who + " ставит задачу: разгрузка машины #" 
                 + std::to_string(number)
+                + " в слоте " + std::to_string(slot)
                 + " (" + std::to_string(truck.pallets.size()) 
-                + " паллет)");
+                + " паллет, занято слотов: " + std::to_string(dock_.busyCount())
+                + " из " + std::to_string(dock_.slotCount()) + ")");
             
-            return std::make_shared<UnloadTask>(truck, storage_);
+            return std::make_shared<UnloadTask>(truck, slot, dock_, storage_);
         }
         case 1: {
             // случайный непустой набор видов товара
@@ -91,7 +102,10 @@ void Manager::run(std::stop_token stopToken) {
     auto gen = RandomGenerator::getGenerator();
 
     while (!stopToken.stop_requested()) {
-        queue_.push(createRandomTask(gen)); // push разбудит одного ждущего грузчика
+        std::shared_ptr<Task> task = createRandomTask(gen, stopToken);
+        if (task) {
+            queue_.push(task); // push разбудит одного ждущего грузчика
+        }
         std::this_thread::sleep_for(period_);
     }
 

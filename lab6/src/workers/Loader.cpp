@@ -49,7 +49,7 @@ void Loader::run(std::stop_token stopToken) {
 
     // пока никто не попросил остановиться
     while (!stopToken.stop_requested()) {
-        // ждем задачу не дольше restTime_; pop вернется сразу, если задача появится или попросят остановиться
+        // жду задачу не дольше restTime_
         std::shared_ptr<Task> task = queue_.pop(stopToken, restTime_);
 
         if (task) {

@@ -7,12 +7,14 @@
 #include <utils/Logger.h>
 #include <workers/Loader.h>
 
-UnloadTask::UnloadTask(const Truck& truck, StorageZone& storage) : truck_(truck), storage_(storage) {}
+UnloadTask::UnloadTask(const Truck& truck, int slot, ReceivingDock& dock, StorageZone& storage)
+    : truck_(truck), slot_(slot), dock_(dock), storage_(storage) {}
 
 void UnloadTask::execute(Loader& loader) {
     std::string who = "Грузчик #" + std::to_string(loader.id());
     std::string truckName = "машины #" + std::to_string(truck_.id);
-    Logger::log(who + " начал разгрузку " + truckName + " (" + std::to_string(truck_.pallets.size()) + " паллет)");
+    Logger::log(who + " начал разгрузку " + truckName + " в слоте " + std::to_string(slot_)
+                + " (" + std::to_string(truck_.pallets.size()) + " паллет)");
 
     for (Pallet& pallet : truck_.pallets) {
         // loader получил флаг о завершении работы потока из Warehouse
@@ -51,7 +53,9 @@ void UnloadTask::execute(Loader& loader) {
         Logger::log(message.str());
     }
 
-    Logger::log(who + " закончил разгрузку " + truckName);
+    // машина полностью разгружена -> по ТЗ слот освобождается
+    dock_.releaseSlot(slot_);
+    Logger::log(who + " закончил разгрузку " + truckName + ", слот " + std::to_string(slot_) + " свободен");
 }
 
 std::string UnloadTask::name() const {

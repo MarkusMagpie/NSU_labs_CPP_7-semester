@@ -31,11 +31,12 @@ public:
 
     // для задачи на инвентаризацию
     struct ProductStats {
-        int receivedInReceivingDock = 0;    // принято в зоне приемки (накопительно, только растет)
-        int inStorageZone = 0;      // лежит в зоне хранения
-        int inPackingZone = 0;      // в процессе упаковки
-        int shipped = 0;            // отправлено (накопительно, только растет)
+        int receivedInReceivingDock = 0;    // принято в зоне приемки (только растет)
+        int inStorageZone = 0;              // лежит в зоне хранения
+        int inPackingZone = 0;              // в процессе упаковки
+        int shipped = 0;                    // отправлено (только растет)
     };
+    ProductStats stats(ProductType type) const;
 
     // действие 2 приемки: "ввести вид и количество -> получить адрес"
     // На терминале системы учета ввести количество и вид товара на паллете и получить адрес (или адреса) хранения товара в зоне хранения
@@ -44,9 +45,6 @@ public:
     // действие 4: "отметить что товар размещен"
     // Отметить в терминале системы учета в зоне хранения, что товар был размещен по заданному адресу
     void confirmPlacement(Placement& placement);
-
-    // счетчики учета по одному виду товара
-    ProductStats stats(ProductType type) const;
 private:
     int terminalCount_; // к-во терминалов системы учета (от 1 до 10)
 
