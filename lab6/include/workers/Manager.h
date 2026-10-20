@@ -8,6 +8,7 @@
 #include <thread>
 
 #include <tasks/TaskQueue.h>
+#include <zones/StorageZone.h>
 
 // МЕНЕДЖЕР: ставит задачи для работы склада (разгрузка, инвентаризация, комплектация)
 // и оповещает о приходе машин для отправки заказов
@@ -16,7 +17,8 @@ private:
     int id_;
     std::chrono::milliseconds period_; // как часто менеджер ставит задачи (в ТЗ не задано)
     int cities_; // сколько городов на складе (для заказов)
-    TaskQueue& queue_; // очередь задач склада (от Warehouse)
+    TaskQueue& queue_; // очередь задач склада
+    StorageZone& storage_; // зона хранения склада; нужна задачам разгрузки
     std::jthread thread_;
 
     // для ВСЕХ менеджеров счетчик номеров машин и заказов; не повторяются
@@ -26,7 +28,7 @@ private:
     // создать случайную задачу
     std::shared_ptr<Task> createRandomTask(std::mt19937& gen);
 public:
-    Manager(int id, std::chrono::milliseconds period, int cities, TaskQueue& queue);
+    Manager(int id, std::chrono::milliseconds period, int cities, TaskQueue& queue, StorageZone& storage);
 
     int id() const;
 

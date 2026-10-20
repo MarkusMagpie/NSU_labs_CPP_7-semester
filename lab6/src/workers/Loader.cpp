@@ -39,7 +39,12 @@ void Loader::join() {
     }
 }
 
+bool Loader::stopRequested() const {
+    return stopToken_.stop_requested();
+}
+
 void Loader::run(std::stop_token stopToken) {
+    stopToken_ = stopToken; // запоминаем, чтобы задачи могли спросить stopRequested()
     Logger::log("Грузчик #" + std::to_string(id_) + " начал смену");
 
     // пока никто не попросил остановиться
@@ -51,7 +56,7 @@ void Loader::run(std::stop_token stopToken) {
             task->execute(*this);
         } else if (!stopToken.stop_requested()) {
             // nullptr не из-за остановки -> задач не было все время restTime_
-            Logger::log("Грузчик #" + std::to_string(id_) + " отдохнул: задач не было");
+            Logger::log("Грузчик #" + std::to_string(id_) + " отдохнул, так как задач в очереди не было");
         }
     }
 

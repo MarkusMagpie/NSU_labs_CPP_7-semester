@@ -23,7 +23,8 @@ namespace limits {
     // Каждый стеллаж содержит от 1 до 6 полок
     inline int kMinShelvesPerRack = 1, kMaxShelvesPerRack = 6;
     // Каждая полка содержит 10 мест под паллеты
-    inline int kPalletPlacesPerShelf = 10;
+    // constexpr используется как размер std::array, должен быть известен при компиляции
+    inline constexpr int kPalletPlacesPerShelf = 10;
     // Данная зона (хранения) имеет от 1 до 10 терминалов
     inline int kMinStorageTerminals = 1, kMaxStorageTerminals = 10;
 

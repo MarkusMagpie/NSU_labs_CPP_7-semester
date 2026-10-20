@@ -16,7 +16,8 @@ std::atomic<int> Manager::nextId_{1};
 Manager::Manager(int id,
     std::chrono::milliseconds period,
     int cities,
-    TaskQueue& queue) : id_(id), period_(period), cities_(cities), queue_(queue) {}
+    TaskQueue& queue,
+    StorageZone& storage) : id_(id), period_(period), cities_(cities), queue_(queue), storage_(storage) {}
 
 int Manager::id() const {
     return id_;
@@ -53,7 +54,7 @@ std::shared_ptr<Task> Manager::createRandomTask(std::mt19937& gen) {
                 + " (" + std::to_string(truck.pallets.size()) 
                 + " паллет)");
             
-            return std::make_shared<UnloadTask>(truck);
+            return std::make_shared<UnloadTask>(truck, storage_);
         }
         case 1: {
             // случайный непустой набор видов товара

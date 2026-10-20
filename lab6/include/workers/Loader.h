@@ -13,6 +13,8 @@ private:
     std::chrono::milliseconds actionTime_; // сколько длится одно действие (1-5 единиц времени)
     std::chrono::milliseconds restTime_; // сколько грузчик ждет задачу
     TaskQueue& queue_; // очередь задач склада (от Warehouse)
+    // копия stop_token, полученного run(); пишет и читает ее только поток самого грузчика
+    std::stop_token stopToken_;
     std::jthread thread_;
 public:
     Loader(int id, 
@@ -29,6 +31,8 @@ public:
     void request_stop();
     // дождаться завершения потока
     void join();
+    // попросили ли грузчика остановиться
+    bool stopRequested() const;
 
     // рабочий цикл грузчика; выполняется в его собственном потоке
     void run(std::stop_token stopToken);

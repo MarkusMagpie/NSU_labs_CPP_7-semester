@@ -17,20 +17,20 @@
 #include <workers/Loader.h>
 
 // проверка из ТЗ: от 10 до 100 паллет, на каждой от 1 до palletCapacity единиц
-bool isTruckValid(const Truck& truck) {
-    int palletCount = static_cast<int>(truck.pallets.size());
-    if (palletCount < limits::kMinTruckPallets || palletCount > limits::kMaxTruckPallets) {
-        return false;
-    }
+// bool isTruckValid(const Truck& truck) {
+//     int palletCount = static_cast<int>(truck.pallets.size());
+//     if (palletCount < limits::kMinTruckPallets || palletCount > limits::kMaxTruckPallets) {
+//         return false;
+//     }
     
-    for (const Pallet& pallet : truck.pallets) {
-        if (pallet.count < 1 || pallet.count > palletCapacity(pallet.type)) {
-            return false;
-        }
-    }
+//     for (const Pallet& pallet : truck.pallets) {
+//         if (pallet.count < 1 || pallet.count > palletCapacity(pallet.type)) {
+//             return false;
+//         }
+//     }
 
-    return true;
-}
+//     return true;
+// }
 
 int main(int argc, char* argv[]) {
     bool fast_mod = argc > 1 && std::string_view(argv[1]) == "--fast";

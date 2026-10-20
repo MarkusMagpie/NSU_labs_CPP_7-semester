@@ -16,7 +16,9 @@ std::shared_ptr<Task> TaskQueue::pop(std::stop_token stopToken, std::chrono::mil
     std::unique_lock<std::mutex> lock(mutex_);
 
     // есть задачи в очереди? просили остановиться? время ожидания вышло? -> false
-    bool hasTask = taskAdded_.wait_for(lock, stopToken, timeout, 
+    bool hasTask = taskAdded_.wait_for(lock, 
+        stopToken, 
+        timeout, 
         [this] { return !tasks_.empty(); });
 
     if (!hasTask) {
