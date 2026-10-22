@@ -120,8 +120,35 @@ void StorageZone::confirmPlacement(Placement& placement) {
     stats_[place.type].inStorageZone += placement.count;
 } // mutex.unlock()
 
+void StorageZone::registerReceived(ProductType type, int count) {
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
+
+    stats_[type].receivedInReceivingDock += count;
+} // mutex.unlock()
+
 StorageZone::ProductStats StorageZone::stats(ProductType type) const {
     std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
 
     return stats_.at(type);
+} // mutex.unlock()
+
+StorageZone::ProductReport StorageZone::report(ProductType type) const {
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
+    
+    ProductReport result;
+    result.type = type;
+    result.stats = stats_.at(type);
+    
+    for (int r = 0; r < rackCount(); ++r) {
+        for (int s = 0; s < static_cast<int>(racks_[r].shelves.size()); ++s) {
+            for (int p = 0; p < kPalletPlacesPerShelf; ++p) {
+                const StoragePlace& place = racks_[r].shelves[s].places[p];
+                if (place.occupied && place.type == type && place.count > 0) {
+                    result.pallets.push_back({StorageAddress{r, s, p}, place.count});
+                }
+            }
+        }
+    }
+
+    return result;
 } // mutex.unlock()

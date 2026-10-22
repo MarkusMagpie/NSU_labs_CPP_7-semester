@@ -65,7 +65,9 @@ void UnloadTask::execute(Loader& loader) {
         }
         const Pallet& pallet = *taken;
 
-        // 2 на терминале ввести вид и количество -> получить адрес(а) хранения
+        // 2 на терминале ввести вид и количество -> получить адрес(а) хранения.
+        // ввод на терминале слота приемки = товар отсканирован в зоне приемки -> он принят
+        storage_.registerReceived(pallet.type, pallet.count);
         std::vector<StorageZone::Placement> placements = storage_.requestPlacement(pallet.type, pallet.count);
         std::this_thread::sleep_for(loader.actionTime());
 

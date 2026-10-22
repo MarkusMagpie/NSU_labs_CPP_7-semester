@@ -42,9 +42,28 @@ public:
     // На терминале системы учета ввести количество и вид товара на паллете и получить адрес (или адреса) хранения товара в зоне хранения
     std::vector<Placement> requestPlacement(ProductType type, int count);
 
+    // действие 2 приемки: товар отсканирован на терминале слота приемки -> он принят
+    void registerReceived(ProductType type, int count);
+
     // действие 4: "отметить что товар размещен"
     // Отметить в терминале системы учета в зоне хранения, что товар был размещен по заданному адресу
     void confirmPlacement(Placement& placement);
+
+    // ИНВЕНТОРИЗАЦИЯ -------------------------------------------------------------------
+    // одна паллета в отчете: где стоит и сколько на ней товара
+    struct PalletInfo {
+        StorageAddress address;
+        int count = 0;
+    };
+
+    // отчет по одному виду товара
+    struct ProductReport {
+        ProductType type;
+        ProductStats stats; 
+        std::vector<PalletInfo> pallets; // все паллеты с этим товаром
+    };
+
+    ProductReport report(ProductType type) const;
 private:
     int terminalCount_; // к-во терминалов системы учета (от 1 до 10)
 
@@ -67,7 +86,7 @@ private:
 
     std::vector<Rack> racks_;
 
-    // счетчики по каждому виду товара; поле закрыто: менять их может только сама зона
+    // счетчики по каждому виду товара
     std::map<ProductType, ProductStats> stats_;
 
     mutable std::mutex mutex_;
