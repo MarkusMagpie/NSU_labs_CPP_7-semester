@@ -11,7 +11,8 @@ Warehouse::Warehouse(Config& config)
       receivingDock_(config.receivingSlots),
       storageZone_(config.storageRacks, config.storageTerminals),
       packingZone_(config.packingTables),
-      shippingZone_(config.shippingSlots) {
+      shippingZone_(config.shippingSlots),
+      tasksLeft_(100) {
     auto gen = RandomGenerator::getGenerator();
 
     // отдых грузчика по ТЗ равен максимальному времени выполнения одной задачи;
@@ -30,7 +31,7 @@ Warehouse::Warehouse(Config& config)
     // как часто менеджер ставит задачи, в ТЗ не задано: беру тот же диапазон 1-5 единиц времени
     for (int id = 0; id < config.managers; ++id) {
         int units = RandomGenerator::getRandom(gen, kMinActionTime, kMaxActionTime);
-        managers_.emplace_back(id, config.timeUnit() * units, config.cities, taskQueue_, receivingDock_, storageZone_);
+        managers_.emplace_back(id, config.timeUnit() * units, config.cities, taskQueue_, receivingDock_, storageZone_, tasksLeft_);
     }
     std::cout << "Создано менеджеров: " << managers_.size() << '\n';
 

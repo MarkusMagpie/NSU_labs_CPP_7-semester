@@ -18,7 +18,9 @@ Manager::Manager(int id,
     int cities,
     TaskQueue& queue,
     ReceivingDock& dock,
-    StorageZone& storage) : id_(id), period_(period), cities_(cities), queue_(queue), dock_(dock), storage_(storage) {}
+    StorageZone& storage,
+    std::atomic<int>& tasksLeft) 
+    : id_(id), period_(period), cities_(cities), queue_(queue), dock_(dock), storage_(storage), tasksLeft_(tasksLeft) {}
 
 int Manager::id() const {
     return id_;
@@ -78,9 +80,16 @@ std::shared_ptr<Task> Manager::createRandomTask(std::mt19937& gen, std::stop_tok
             if (types.empty()) {
                 types.push_back(randomProductType(gen));
             }
-            Logger::log(who + " ставит задачу: инвентаризация (" + std::to_string(types.size()) + " вида товара)");
+
+            Logger::log(who + " ставит задачу: инвентаризация #" + std::to_string(number)
+                + " (" + std::to_string(types.size()) + " вида товара)");
+
+            auto task = std::make_shared<InventoryTask>(number, types, storage_);
             
-            return std::make_shared<InventoryTask>(types);
+            // отчеты придут когда грузчик выполнит задачу
+            pendingReports_.emplace_back(number, task->getFuture());
+            
+            return task;
         }
         default: {
             Order order = Order::generate(number, cities_, gen);
@@ -96,17 +105,67 @@ std::shared_ptr<Task> Manager::createRandomTask(std::mt19937& gen, std::stop_tok
     }
 }
 
+void Manager::collectReadyReports() {
+    std::string who = "Менеджер #" + std::to_string(id_);
+
+    for (auto it = pendingReports_.begin(); it != pendingReports_.end(); ) {
+        auto& [taskId, future] = *it;
+
+        // готов ли результат
+        if (future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            ++it;
+            continue;
+        }
+
+        // get() усыпляет менеджера; забирает результат
+        InventoryTask::Reports reports = future.get();
+
+        for (const StorageZone::ProductReport& report : reports) {
+            Logger::log(who + " получил отчет инвентаризации #" + std::to_string(taskId)
+                + " - " + InventoryTask::describe(report));
+        }
+
+        it = pendingReports_.erase(it); // erase возвращает итератор на следующий элемент + удаление текущего
+    }
+}
+
 void Manager::run(std::stop_token stopToken) {
     Logger::log("Менеджер #" + std::to_string(id_) + " начал смену");
 
     auto gen = RandomGenerator::getGenerator();
+    bool limitReported = false;
 
     while (!stopToken.stop_requested()) {
-        std::shared_ptr<Task> task = createRandomTask(gen, stopToken);
-        if (task) {
-            queue_.push(task); // push разбудит одного ждущего грузчика
+        // std::shared_ptr<Task> task = createRandomTask(gen, stopToken);
+        // if (task) {
+        //     queue_.push(task); // push разбудит одного ждущего грузчика
+        // }
+        
+        if (tasksLeft_.fetch_sub(1) > 0) { // успел взять единицу из лимита
+            std::shared_ptr<Task> task = createRandomTask(gen, stopToken);
+            if (task) {
+                queue_.push(task);
+            } else {
+                ++tasksLeft_; // задачу поставить не вышло (нет слота) -> вернуть единицу
+            }
+        } else {
+            // fetch_sub уменьшил счетчик и при неудачной попытке -> вернуть, иначе единица потеряется:
+            // другой менеджер мог вернуть свою единицу (нет слота) и она ушла бы в "минус"
+            ++tasksLeft_;
+
+            if (!limitReported) {
+                Logger::log("Менеджер #" + std::to_string(id_) + ": лимит задач на смену исчерпан, новые задачи не ставлю");
+                limitReported = true;
+            }
         }
+        collectReadyReports(); // для таски инвентаризации
         std::this_thread::sleep_for(period_);
+    }
+
+    collectReadyReports();
+    if (!pendingReports_.empty()) {
+        Logger::log("Менеджер #" + std::to_string(id_) + " не дождался отчетов инвентаризации: "
+            + std::to_string(pendingReports_.size()));
     }
 
     Logger::log("Менеджер #" + std::to_string(id_) + " закончил смену");

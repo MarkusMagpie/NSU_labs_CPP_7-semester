@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <deque>
 
 #include <tasks/TaskQueue.h>
@@ -22,6 +23,10 @@ private:
     ShippingZone shippingZone_;
     
     TaskQueue taskQueue_;
+
+    // сколько задач еще можно поставить за смену; общий для всех менеджеров.
+    // Объявлен до managers_: менеджеры работают с ним, он должен жить дольше них
+    std::atomic<int> tasksLeft_;
 
     std::deque<Loader> loaders_;
     std::deque<Manager> managers_;

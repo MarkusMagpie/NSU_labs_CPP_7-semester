@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
 
     // задачи теперь ставят менеджеры сами
     warehouse.start();
-    std::this_thread::sleep_for(config.timeUnit() * 10);
+    std::this_thread::sleep_for(config.timeUnit() * 120);
     warehouse.stop();
 
     Logger::log("в очереди склада осталось задач: " + std::to_string(warehouse.taskQueue().size()));
