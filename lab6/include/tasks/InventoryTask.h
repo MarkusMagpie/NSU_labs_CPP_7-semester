@@ -13,7 +13,7 @@
 // ! получить задачу могут несколько грузчиков, выполнить должен только один
 class InventoryTask : public Task {
 public:
-    // результат задачи: по 1 отчету на каждый вид товара (их 3)
+    // результат задачи: по 1 отчету на каждый вид товара (их всего 3)
     using Reports = std::vector<StorageZone::ProductReport>;
     std::promise<Reports> promise_;
 

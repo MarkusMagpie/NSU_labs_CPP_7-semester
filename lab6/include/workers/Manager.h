@@ -13,6 +13,7 @@
 #include <tasks/InventoryTask.h>
 #include <tasks/TaskQueue.h>
 #include <zones/ReceivingDock.h>
+#include <zones/ShippingZone.h>
 #include <zones/StorageZone.h>
 
 // МЕНЕДЖЕР: ставит задачи для работы склада (разгрузка, инвентаризация, комплектация)
@@ -25,6 +26,7 @@ private:
     TaskQueue& queue_; // очередь задач склада
     ReceivingDock& dock_; // зона приемки: машина должна занять слот до постановки задачи разгрузки
     StorageZone& storage_; // зона хранения склада; нужна задачам разгрузки
+    ShippingZone& shipping_; // зона отправки: сюда менеджер ставит приехавшие машины для отправки
     // общий для всех менеджеров лимит: сколько задач еще можно поставить за смену (принадлежит Warehouse)
     std::atomic<int>& tasksLeft_;
     
@@ -42,6 +44,9 @@ private:
 
     // забрать и вывести уже готовые отчеты инвентаризации (не ждет неготовые)
     void collectReadyReports();
+
+    // оповестить о приходе машины для отправки: поставить ее в свободный слот зоны отправки
+    void announceShippingTruck(std::mt19937& gen);
 public:
     Manager(int id, 
         std::chrono::milliseconds period, 
@@ -49,6 +54,7 @@ public:
         TaskQueue& queue, 
         ReceivingDock& dock, 
         StorageZone& storage,
+        ShippingZone& shipping,
         std::atomic<int>& tasksLeft);
 
     int id() const;

@@ -25,13 +25,12 @@ Warehouse::Warehouse(Config& config)
         // emplace_back создает Loader прямо внутри deque из этих аргументов, без копирования
         loaders_.emplace_back(id, config.timeUnit() * units, restTime, taskQueue_);
     }
-    std::cout << "Создано грузчиков: " << loaders_.size()
-              << " (например у грузчика #0 действие длится " << loaders_[0].actionTime().count() << " мс)\n";
+    std::cout << "Создано грузчиков: " << loaders_.size() << "\n";
 
     // как часто менеджер ставит задачи, в ТЗ не задано: беру тот же диапазон 1-5 единиц времени
     for (int id = 0; id < config.managers; ++id) {
         int units = RandomGenerator::getRandom(gen, kMinActionTime, kMaxActionTime);
-        managers_.emplace_back(id, config.timeUnit() * units, config.cities, taskQueue_, receivingDock_, storageZone_, tasksLeft_);
+        managers_.emplace_back(id, config.timeUnit() * units, config.cities, taskQueue_, receivingDock_, storageZone_, shippingZone_, tasksLeft_);
     }
     std::cout << "Создано менеджеров: " << managers_.size() << '\n';
 

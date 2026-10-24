@@ -53,12 +53,12 @@ std::future<InventoryTask::Reports> InventoryTask::getFuture() {
 
 std::string InventoryTask::describe(const StorageZone::ProductReport& report) {
     std::ostringstream line;
-    line << report.type
-         << ": принято " << report.stats.receivedInReceivingDock
-         << ", на хранении " << report.stats.inStorageZone
-         << ", в упаковке " << report.stats.inPackingZone
-         << ", отправлено " << report.stats.shipped
-         << ", паллет " << report.pallets.size();
+    line << report.type 
+        << ": принято " << report.stats.receivedInReceivingDock
+        << ", на хранении " << report.stats.inStorageZone
+        << ", в упаковке " << report.stats.inPackingZone
+        << ", отправлено " << report.stats.shipped
+        << ", паллет " << report.pallets.size();
 
     // адресов может быть сотни: в лог первые несколько
     const size_t shown = 3;

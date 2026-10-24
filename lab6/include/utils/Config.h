@@ -37,6 +37,8 @@ namespace limits {
     
     // ЗОНА ОТПРАВКИ: от 4 до 40 слотов
     inline int kMinShippingSlots = 4, kMaxShippingSlots = 40;
+    // Сколько машина для отправки содержит мест под паллеты (от 10 до 100)
+    inline int kMinShippingTruckPlaces = 10, kMaxShippingTruckPlaces = 100;
     // После 5-ой неудачной попытки отправить паллету
     inline int kMaxShippingAttempts = 5;
 

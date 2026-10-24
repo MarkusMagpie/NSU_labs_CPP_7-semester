@@ -60,7 +60,7 @@ public:
     struct ProductReport {
         ProductType type;
         ProductStats stats; 
-        std::vector<PalletInfo> pallets; // все паллеты с этим товаром
+        std::vector<PalletInfo> pallets; // все паллеты с этим товаром (их адреса и к-во)
     };
 
     ProductReport report(ProductType type) const;

@@ -19,8 +19,16 @@ Manager::Manager(int id,
     TaskQueue& queue,
     ReceivingDock& dock,
     StorageZone& storage,
+    ShippingZone& shipping,
     std::atomic<int>& tasksLeft) 
-    : id_(id), period_(period), cities_(cities), queue_(queue), dock_(dock), storage_(storage), tasksLeft_(tasksLeft) {}
+    : id_(id), 
+    period_(period), 
+    cities_(cities), 
+    queue_(queue), 
+    dock_(dock), 
+    storage_(storage), 
+    shipping_(shipping), 
+    tasksLeft_(tasksLeft) {}
 
 int Manager::id() const {
     return id_;
@@ -117,7 +125,7 @@ void Manager::collectReadyReports() {
             continue;
         }
 
-        // get() усыпляет менеджера; забирает результат
+        // результат уже готов -> get() забирает результат
         InventoryTask::Reports reports = future.get();
 
         for (const StorageZone::ProductReport& report : reports) {
@@ -127,6 +135,34 @@ void Manager::collectReadyReports() {
 
         it = pendingReports_.erase(it); // erase возвращает итератор на следующий элемент + удаление текущего
     }
+}
+
+void Manager::announceShippingTruck(std::mt19937& gen) {
+    ShippingZone::ShippingTruck truck;
+    truck.id = nextId_++;
+    truck.city = RandomGenerator::getRandom(gen, 0, cities_ - 1);
+    truck.capacity = RandomGenerator::getRandom(gen, limits::kMinShippingTruckPlaces, limits::kMaxShippingTruckPlaces);
+
+    // если все слоты заняты то машина не встает (stop_token не нужен; ожидания нет)
+    int slot = shipping_.arrive(truck, std::stop_token{}, std::chrono::milliseconds(0));
+
+    std::string who = "Менеджер #" + std::to_string(id_);
+    if (slot < 0) {
+        Logger::log(who + ": машина для отправки #" 
+            + std::to_string(truck.id)
+            + " не смогла встать так как все слоты зоны отправки заняты");
+        
+        return;
+    }
+
+    Logger::log(who + " оповещает: машина для отправки #" 
+        + std::to_string(truck.id)
+        + " в город " + std::to_string(truck.city)
+        + " встала в слот " + std::to_string(slot)
+        + " (" + std::to_string(truck.capacity) 
+        + " мест, занято слотов: "
+        + std::to_string(shipping_.busyCount()) 
+        + " из " + std::to_string(shipping_.slotCount()) + ")");
 }
 
 void Manager::run(std::stop_token stopToken) {
@@ -157,6 +193,10 @@ void Manager::run(std::stop_token stopToken) {
                 Logger::log("Менеджер #" + std::to_string(id_) + ": лимит задач на смену исчерпан, новые задачи не ставлю");
                 limitReported = true;
             }
+        }
+        // оповещение о приходе машины для отправки: не задача для грузчиков, на лимит задач не влияет
+        if (RandomGenerator::getRandom(gen, 0, 2) == 0) {
+            announceShippingTruck(gen);
         }
         collectReadyReports(); // для таски инвентаризации
         std::this_thread::sleep_for(period_);
