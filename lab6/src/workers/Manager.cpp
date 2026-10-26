@@ -194,11 +194,14 @@ void Manager::run(std::stop_token stopToken) {
                 limitReported = true;
             }
         }
-        // оповещение о приходе машины для отправки: не задача для грузчиков, на лимит задач не влияет
+
+        // оповещение о приходе машины для зоны отправки
         if (RandomGenerator::getRandom(gen, 0, 2) == 0) {
             announceShippingTruck(gen);
         }
+
         collectReadyReports(); // для таски инвентаризации
+        
         std::this_thread::sleep_for(period_);
     }
 
