@@ -44,23 +44,23 @@ bool Loader::stopRequested() const {
 }
 
 void Loader::run(std::stop_token stopToken) {
-    stopToken_ = stopToken; // запоминаем, чтобы задачи могли спросить stopRequested()
+    stopToken_ = stopToken; // чтобы задачи могли спросить stopRequested()
     Logger::log("Грузчик #" + std::to_string(id_) + " начал смену");
 
     // пока никто не попросил остановиться
     while (!stopToken.stop_requested()) {
-        // жду задачу не дольше restTime_
+        // 1) вынул задачу; в очереди ее больше нет
         std::shared_ptr<Task> task = queue_.pop(stopToken, restTime_);
 
         if (task) {
-            // задаче нужны еще грузчики (в машине остались невзятые паллеты)?
-            // тогда push обратно в очередь; следующий свободный грузчик присоединится
+            // 2) задаче еще нужны грузчики?
             if (task->needsMoreLoaders()) {
+                // 2) да -> сразу кладу ту же задачу обратно в очередь
                 queue_.push(task);
             }
+            // 3) сам вне зависимости от 2) начинаю делать задачу
             task->execute(*this);
         } else if (!stopToken.stop_requested()) {
-            // nullptr не из-за остановки -> задач не было все время restTime_
             Logger::log("Грузчик #" + std::to_string(id_) + " отдохнул, так как задач в очереди не было");
         }
     }

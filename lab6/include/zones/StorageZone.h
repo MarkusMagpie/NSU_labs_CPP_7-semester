@@ -4,6 +4,7 @@
 #include <vector>
 #include <map>
 #include <mutex>
+#include <optional>
 
 #include <model/ProductType.h>
 #include <model/StorageAddress.h>
@@ -64,6 +65,52 @@ public:
     };
 
     ProductReport report(ProductType type) const;
+
+    // КОМПЛЕКТАЦИЯ ---------------------------------------------------------------------
+    // Путь товара заказа: 
+    // полка -> (checkoutPallet) стол комплектации -> 
+    // (takeUnits) паллета отправки
+    // -> машина отправки -> (registerShipped) отправлено. 
+    // Оставшееся на паллете хранения -> (returnPallet) на полку
+
+    /**
+     * @brief резерв товара под заказ (вызывает менеджер ДО постановки задачи на комплектацию)
+     *
+     * @param items сколько единиц каждого вида нужно заказу
+     * @return true - зарезервировано, заказ можно ставить; false - товара не хватает
+     */
+    bool reserveForOrder(const std::map<ProductType, int>& items);
+
+    // снять резерв если заказ не будет собран
+    void releaseReservation(const std::map<ProductType, int>& items);
+
+    // паллета хранения выданная на стол комплектации в зоне упаковки
+    struct CheckedOutPallet {
+        StorageAddress address; // откуда взята
+        ProductType type = ProductType::Light;
+        int count = 0; // сколько единиц товара было на паллете в момент выдачи
+    };
+
+    /**
+     * @brief шаг 3 комплектации: выдать паллету хранения с полки на стол 
+     * (зона хранения -> зона упаковки)
+     */
+    std::optional<CheckedOutPallet> checkoutPallet(ProductType type);
+
+    /**
+     * @brief шаг 4 комплектации: снять count единиц товара с паллеты 
+     * хранения на столе на паллету отправки для заказа 
+     */
+    void takeUnits(const StorageAddress& address, int count);
+
+    /**
+     * @brief шаги 6-7 комплектации: вернуть паллету со стола на 
+     * ее место на полке (зона упаковки -> зона хранения)
+     */
+    void returnPallet(const StorageAddress& address);
+
+    // машина отправки уехала: ее груз "в упаковке" -> "отправлено"
+    void registerShipped(const std::map<ProductType, int>& cargo);
 private:
     int terminalCount_; // к-во терминалов системы учета (от 1 до 10)
 
@@ -73,6 +120,7 @@ private:
         ProductType type = ProductType::Light; // какой товар на паллете (occupied=true)
         int count = 0; // сколько единиц уже лежит
         int reserved = 0; // сколько единиц обещано (адрес выдан), но еще не положено
+        bool onTable = false; // паллета увезена на стол комплектации зоны упаковки 
     };
 
 
@@ -88,6 +136,10 @@ private:
 
     // счетчики по каждому виду товара
     std::map<ProductType, ProductStats> stats_;
+
+    // сколько единиц каждого вида лежит на паллетах хранения 
+    // и еще НЕ обещано ни одному заказу
+    std::map<ProductType, int> freeForOrders_;
 
     mutable std::mutex mutex_;
 };

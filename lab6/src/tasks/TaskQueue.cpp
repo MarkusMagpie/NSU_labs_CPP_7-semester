@@ -7,12 +7,11 @@ void TaskQueue::push(std::shared_ptr<Task> task) {
     } // mutex.unlock()
 
     // бужу одного спящего в pop() безработного рабочего, 
-    // и даю возможность ему сразу захватить мбютекс
+    // даю ему возможность захватить мьютекс
     taskAdded_.notify_one();
 }
 
 std::shared_ptr<Task> TaskQueue::pop(std::stop_token stopToken, std::chrono::milliseconds timeout) {
-    // unique_lock, а не lock_guard: wait_for должен уметь временно отпускать мьютекс на время сна
     std::unique_lock<std::mutex> lock(mutex_);
 
     // есть задачи в очереди? просили остановиться? время ожидания вышло? -> false

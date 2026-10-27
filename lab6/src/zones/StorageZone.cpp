@@ -21,10 +21,10 @@ StorageZone::StorageZone(int rackCount, int terminalCount) : terminalCount_(term
         racks_.push_back(rack);
     }
 
-    // заранее создаем нулевые счетчики для всех видов товара:
-    // тогда в stats() можно читать через at(), и в отчете будут даже еще не привезенные виды
+    // нулевые счетчики для всех видов товара
     for (ProductType type : kAllProductTypes) {
         stats_[type] = ProductStats{};
+        freeForOrders_[type] = 0;
     }
 
     std::cout << "Зона хранения создана: " << rackCount << " стеллажей, "
@@ -62,8 +62,14 @@ std::vector<StorageZone::Placement> StorageZone::requestPlacement(ProductType ty
         for (int s = 0; s < static_cast<int>(racks_[r].shelves.size()) && remaining > 0; ++s) {
             for (int p = 0; p < kPalletPlacesPerShelf && remaining > 0; ++p) {
                 StoragePlace& place = racks_[r].shelves[s].places[p];
+                
+                // пустое место или паллета с другим товаром
                 if (!place.occupied || place.type != type) {
-                    continue; // пустое место или паллета с другим товаром
+                    continue;
+                }
+                // паллета сейчас на столе комплектации -> класть на нее товар нельзя
+                if (place.onTable) {
+                    continue;
                 }
 
                 // свободно = лимит - уже лежит - уже обещано другим грузчикам
@@ -118,6 +124,9 @@ void StorageZone::confirmPlacement(Placement& placement) {
 
     // для задачи инвентаризации
     stats_[place.type].inStorageZone += placement.count;
+    
+    // новый товар на полке не обещан заказам -> можно резервировать
+    freeForOrders_[place.type] += placement.count;
 } // mutex.unlock()
 
 void StorageZone::registerReceived(ProductType type, int count) {
@@ -143,7 +152,8 @@ StorageZone::ProductReport StorageZone::report(ProductType type) const {
         for (int s = 0; s < static_cast<int>(racks_[r].shelves.size()); ++s) {
             for (int p = 0; p < kPalletPlacesPerShelf; ++p) {
                 const StoragePlace& place = racks_[r].shelves[s].places[p];
-                if (place.occupied && place.type == type && place.count > 0) {
+                // onTable: паллета на столе комплектации - ее товар уже "в упаковке", а не в зоне хранения
+                if (place.occupied && !place.onTable && place.type == type && place.count > 0) {
                     result.pallets.push_back({StorageAddress{r, s, p}, place.count});
                 }
             }
@@ -151,4 +161,110 @@ StorageZone::ProductReport StorageZone::report(ProductType type) const {
     }
 
     return result;
+} // mutex.unlock()
+
+bool StorageZone::reserveForOrder(const std::map<ProductType, int>& items) {
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
+
+    // 1 проверить все виды
+    for (auto& [type, count] : items) {
+        if (freeForOrders_.at(type) < count) {
+            // товара не хватает -> заказ сейчас не ставлю
+            return false;
+        }
+    }
+
+    // 2 хватает по всем видам -> закрепить товар за заказом
+    for (auto& [type, count] : items) {
+        freeForOrders_.at(type) -= count;
+    }
+
+    return true;
+} // mutex.unlock()
+
+void StorageZone::releaseReservation(const std::map<ProductType, int>& items) {
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
+
+    // обещанный несобранному заказу товар снова доступен другим заказам
+    for (auto& [type, count] : items) {
+        freeForOrders_.at(type) += count;
+    }
+} // mutex.unlock()
+
+
+
+std::optional<StorageZone::CheckedOutPallet> StorageZone::checkoutPallet(ProductType type) {
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
+
+    for (int r = 0; r < rackCount(); ++r) {
+        for (int s = 0; s < static_cast<int>(racks_[r].shelves.size()); ++s) {
+            for (int p = 0; p < kPalletPlacesPerShelf; ++p) {
+                StoragePlace& place = racks_[r].shelves[s].places[p];
+
+                // стоит на полке (не на другом столе), 
+                // нужного вида, 
+                // с товаром,
+                // без брони разгрузки (reserved == 0) 
+                //  - иначе грузчик-разгрузчик понес бы товар
+                // на паллету которой уже нет на полке
+                if (!place.occupied || place.onTable || place.type != type
+                    || place.count == 0 || place.reserved != 0) {
+                    continue;
+                }
+
+                place.onTable = true;
+
+                // ТЗ "паллета перемещена в зону упаковки": 3a; 3b
+                stats_[type].inStorageZone -= place.count;
+                stats_[type].inPackingZone += place.count;
+
+                return CheckedOutPallet{StorageAddress{r, s, p}, type, place.count};
+            }
+        }
+    }
+
+    return std::nullopt;
+} // mutex.unlock()
+
+void StorageZone::takeUnits(const StorageAddress& address, int count) {
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
+
+    StoragePlace& place = racks_[address.rack].shelves[address.shelf].places[address.place];
+    if (!place.onTable || count > place.count) {
+        Logger::log("ОШИБКА takeUnits: паллета не на столе или на ней меньше " + std::to_string(count) + " шт");
+        return;
+    }
+
+    // единицы переложены с паллеты хранения на паллету отправки
+    place.count -= count;
+} // mutex.unlock()
+
+void StorageZone::returnPallet(const StorageAddress& address) {
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
+
+    StoragePlace& place = racks_[address.rack].shelves[address.shelf].places[address.place];
+    if (!place.onTable) {
+        Logger::log("ОШИБКА returnPallet: паллета и так на полке");
+        return;
+    }
+
+    place.onTable = false;
+
+    // оставшийся на паллете товар возвращается в зону хранения
+    stats_[place.type].inPackingZone -= place.count;
+    stats_[place.type].inStorageZone += place.count;
+
+    // шаг 6 ТЗ: "при снятии последней единицы товара с паллеты слот под паллет на полке освобождается"
+    if (place.count == 0) {
+        place.occupied = false;
+    }
+} // mutex.unlock()
+
+void StorageZone::registerShipped(const std::map<ProductType, int>& cargo) {
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
+
+    for (auto& [type, count] : cargo) {
+        stats_[type].inPackingZone -= count;
+        stats_[type].shipped += count;
+    }
 } // mutex.unlock()
