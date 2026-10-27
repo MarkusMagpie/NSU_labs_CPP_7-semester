@@ -3,6 +3,8 @@
 #include <mutex>
 #include <thread>
 
+#include <utils/Config.h>
+#include <utils/RandomGenerator.h>
 #include <zones/ShippingZone.h>
 
 ShippingZone::ShippingZone(int slotCount) 
@@ -118,17 +120,80 @@ int ShippingZone::busyCount() const {
         }));
 }
 
-int ShippingZone::findTruck(int city) const {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
-
+std::optional<ShippingZone::TruckRef> ShippingZone::findTruckLocked(int city) const {
     for (int slot = 0; slot < slotCount(); ++slot) {
         const std::optional<ShippingTruck>& truck = slots_[slot];
         if (truck && truck->city == city && truck->loaded < truck->capacity) {
-            return slot;
+            return TruckRef{slot, truck->id};
         }
     }
-    
-    return -1;
+
+    return std::nullopt;
+}
+
+std::optional<ShippingZone::TruckRef> ShippingZone::findTruck(int city) const {
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+
+    return findTruckLocked(city);
+}
+
+std::optional<ShippingZone::TruckRef> ShippingZone::waitForTruck(int city, 
+    std::stop_token stopToken, 
+    std::chrono::milliseconds timeout) 
+{
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+
+    std::optional<TruckRef> found;
+    // грузчик ждет прихода в нужный ему город машины со свободным местом
+    boardChanged_.wait_for(lock, 
+        stopToken, 
+        timeout, 
+        [this, city, &found] {
+            found = findTruckLocked(city);
+            return found.has_value();
+    });
+
+    return found;
+}
+
+ShippingZone::ShipResult ShippingZone::ship(int city, 
+    const Pallet& pallet, 
+    std::chrono::milliseconds actionTime, 
+    std::chrono::milliseconds timeUnit, 
+    std::stop_token stopToken) {
+    ShipResult result;
+
+    for (int attempt = 1; attempt <= limits::kMaxShippingAttempts && !stopToken.stop_requested(); ++attempt) {
+        result.attempts = attempt;
+
+        // 1 просмотреть доску занятости, найти свободную машину в нужный город
+        std::optional<TruckRef> truck = findTruck(city);
+
+        // 3a машины в нужный город нет -> ждать от 1 до 5 единиц пока не появится
+        if (!truck) {
+            int units = RandomGenerator::getRandom(limits::kMinActionTime, limits::kMaxActionTime);
+            truck = waitForTruck(city, stopToken, timeUnit * units);
+            if (!truck) {
+                continue; // 3b следующая попытка тк не дождался
+            }
+        }
+
+        // 2 машина есть -> встать в очередь к двери и погрузить
+        LoadResult loaded = load(truck->slot, truck->truckId, pallet, actionTime);
+        if (loaded.status == LoadStatus::TruckGone) {
+            continue; // 2ai машина наполнилась и уехала пока шел -> повторить попытку
+        }
+
+        result.shipped = true;
+        if (loaded.status == LoadStatus::Departed) {
+            result.departedTruck = loaded.truck;
+        }
+
+        return result;
+    }
+
+    // 3c после 5 неудачных попыток вызывающий возвращает паллету на стол комплектации
+    return result;
 }
 
 ShippingZone::Board ShippingZone::board() const {

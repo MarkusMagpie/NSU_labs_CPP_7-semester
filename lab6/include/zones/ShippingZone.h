@@ -41,6 +41,19 @@ public:
         ShippingTruck truck;
     };
 
+    // что грузчик увидел на доске: в каком слоте и какая именно машина
+    struct TruckRef {
+        int slot = -1;
+        int truckId = 0;
+    };
+
+    // итог отправки паллеты: удалось ли, за сколько попыток, и уехавшая машина если паллета была последней
+    struct ShipResult {
+        bool shipped = false;
+        int attempts = 0;
+        std::optional<ShippingTruck> departedTruck;
+    };
+
     int slotCount() const;
 
     /**
@@ -74,12 +87,51 @@ public:
 
     // ДОСКА ЗАНЯТОСТИ ----------------------------------------------------------------------------------
 
-    // слот машины в city гдеесть свободное место
-    int findTruck(int city) const;
+    // машина в город city со свободным местом (по доске занятости) или std::nullopt
+    std::optional<TruckRef> findTruck(int city) const;
+
+    /**
+     * @brief ждет, пока на доске появится машина в город city со свободным местом
+     *
+     * Грузчики спят на boardChanged_; его будят методы arrive()/load()/depart() (через notify_all)
+     *
+     * @param city город заказа
+     * @param stopToken токен остановки потока грузчика (проснется сразу при остановке)
+     * @param timeout сколько ждать не больше
+     * @return машина или std::nullopt
+     */
+    std::optional<TruckRef> waitForTruck(int city, 
+        std::stop_token stopToken, 
+        std::chrono::milliseconds timeout);
+
+    /**
+     * @brief отправить паллету заказа в город city - алгоритм грузчика в зоне отправки по ТЗ
+     *
+     * Попытка: посмотреть доску; 
+     * если машины в город нет - ждать ее от 1 до 5 единиц времени;
+     * если машина есть - погрузить; 
+     * если машина уехала/заполнилась - следующая попытка.
+     * Не больше maxAttempts попыток (по ТЗ 5).
+     *
+     * @param city город заказа
+     * @param pallet паллета для отправки
+     * @param actionTime время одного действия грузчика (погрузка)
+     * @param timeUnit единица времени (1 с или 1 мс) - для ожидания машины 1-5 единиц
+     * @param stopToken токен остановки потока грузчика
+     */
+    ShipResult ship(int city, 
+        const Pallet& pallet, 
+        std::chrono::milliseconds actionTime,
+        std::chrono::milliseconds timeUnit, 
+        std::stop_token stopToken);
 
     Board board() const;
 private:
     Board slots_;
+
+    // поиск машины по доске БЕЗ захвата мьютекса - вызывать только под уже захваченным mutex_
+    // (findTruck и условие ожидания в waitForTruck). Повторно захватывать mutex_ тем же потоком нельзя
+    std::optional<TruckRef> findTruckLocked(int city) const;
 
     // защищает slots_: читатели - shared_lock, писатели (приезд/отъезд/погрузка) - unique_lock
     mutable std::shared_mutex mutex_;
