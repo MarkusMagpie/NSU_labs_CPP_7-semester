@@ -33,6 +33,8 @@ public:
     void join();
     // попросили ли грузчика остановиться
     bool stopRequested() const;
+    // токен остановки для ожиданий внутри задач (bookTable, ship)
+    std::stop_token stopToken() const;
 
     // рабочий цикл грузчика; выполняется в его собственном потоке
     void run(std::stop_token stopToken);

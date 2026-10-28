@@ -43,6 +43,10 @@ bool Loader::stopRequested() const {
     return stopToken_.stop_requested();
 }
 
+std::stop_token Loader::stopToken() const {
+    return stopToken_;
+}
+
 void Loader::run(std::stop_token stopToken) {
     stopToken_ = stopToken; // чтобы задачи могли спросить stopRequested()
     Logger::log("Грузчик #" + std::to_string(id_) + " начал смену");

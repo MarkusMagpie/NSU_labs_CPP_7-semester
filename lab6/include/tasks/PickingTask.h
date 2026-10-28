@@ -3,6 +3,8 @@
 #include <chrono>
 #include <map>
 #include <mutex>
+#include <optional>
+#include <string>
 #include <vector>
 
 #include <model/Order.h>
@@ -15,7 +17,7 @@
 // ЗАДАЧА НА КОМПЛЕКТАЦИЮ: собрать заказ на столе комплектации (в зоне упаковки) и отправить его
 class PickingTask : public Task {
 private:
-    Order order_; // какой заказ собирать: город и сколько единиц каждого вида
+    Order order_; // какой заказ собирать
     int maxLoaders_; // сколько грузчиков максимум могут одновременно работать над задачей
 
     // зоны склада с которыми работает комплектация
@@ -48,6 +50,38 @@ private:
     
     OrderProgress progress_;
     TableState tableState_;
+
+    // ШАГИ АЛГОРИТМА КОМПЛЕКТАЦИИ по ТЗ зоны упаковки -------------------
+
+    // "Грузчик #А [заказ #Б]"
+    std::string who(const Loader& loader) const;
+
+    // 2 - забронировать стол комплектации
+    bool bookTable(Loader& loader);
+
+    // какой вид товара сейчас собирать
+    std::optional<ProductType> currentType() const;
+
+    // 3 - забрать паллеты хранения вида type на стол комплектации (ЗХ -> ЗУ)
+    void fetchPallets(Loader& loader, ProductType type);
+
+    // 4 - перекладывать по единице с паллет хранения на паллету отправки
+    bool moveUnits(Loader& loader, ProductType type);
+
+    // паллета отправки типа type на которую еще можно класть или новая в свободном слоте упаковки
+    int packPalletFor(ProductType type);
+
+    // паллета отправки готова: заполнена или этого вида заказу больше не нужно
+    bool isReady(const Pallet& pallet) const;
+
+    // 5 - отметить готовность паллеты отправки index и отвезти в ЗО (ship)
+    bool shipPallet(Loader& loader, int index);
+
+    // отправить все готовые паллеты отправки (например, оставшиеся на столе после неудачной попытки)
+    bool shipReadyPallets(Loader& loader);
+
+    // 6-7 - вернуть паллеты хранения опустевшие или больше не нужные заказу; all - вернуть все
+    void returnPallets(Loader& loader, bool all);
 public:
     PickingTask(const Order& order, 
         int maxLoaders,
