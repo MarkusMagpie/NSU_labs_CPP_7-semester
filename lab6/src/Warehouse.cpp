@@ -30,7 +30,7 @@ Warehouse::Warehouse(Config& config)
     // как часто менеджер ставит задачи, в ТЗ не задано: беру тот же диапазон 1-5 единиц времени
     for (int id = 0; id < config.managers; ++id) {
         int units = RandomGenerator::getRandom(gen, kMinActionTime, kMaxActionTime);
-        managers_.emplace_back(id, config.timeUnit() * units, config.cities, taskQueue_, receivingDock_, storageZone_, shippingZone_, tasksLeft_);
+        managers_.emplace_back(id, config.timeUnit() * units, config.cities, taskQueue_, receivingDock_, storageZone_, shippingZone_, packingZone_, config.timeUnit(), tasksLeft_);
     }
     std::cout << "Создано менеджеров: " << managers_.size() << '\n';
 

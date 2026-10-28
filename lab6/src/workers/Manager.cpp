@@ -1,3 +1,4 @@
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,8 @@ Manager::Manager(int id,
     ReceivingDock& dock,
     StorageZone& storage,
     ShippingZone& shipping,
+    PackingZone& packing,
+    std::chrono::milliseconds timeUnit,
     std::atomic<int>& tasksLeft) 
     : id_(id), 
     period_(period), 
@@ -27,7 +30,9 @@ Manager::Manager(int id,
     queue_(queue), 
     dock_(dock), 
     storage_(storage), 
-    shipping_(shipping), 
+    shipping_(shipping),
+    packing_(packing),
+    timeUnit_(timeUnit), 
     tasksLeft_(tasksLeft) {}
 
 int Manager::id() const {
@@ -101,14 +106,28 @@ std::shared_ptr<Task> Manager::createRandomTask(std::mt19937& gen, std::stop_tok
         }
         default: {
             Order order = Order::generate(number, cities_, gen);
+
+            // заказ ставится только если на складе есть весь его товар.
+            // Резерв закрепляет товар за заказом -> другие заказы его не получат
+            if (!storage_.reserveForOrder(order.items)) {
+                Logger::log(who + ": заказ #" + std::to_string(number)
+                    + " не поставлен - на складе не хватает товара");
+                    
+                return nullptr;
+            }
+
             // сколько грузчиков могут одновременно комплектовать заказ: в ТЗ не задано!!! беру 1-3
             int maxLoaders = RandomGenerator::getRandom(gen, 1, 3);
-            Logger::log(who + 
-                " ставит задачу: комплектация заказа #" 
-                + std::to_string(number)
-                + " в город " + std::to_string(order.city));
-            
-            return std::make_shared<PickingTask>(order, maxLoaders);
+            std::ostringstream message;
+            message << who << " ставит задачу: комплектация заказа #" << number 
+            << " в город " << order.city 
+            << ", товар зарезервирован:";
+            for (const auto& [type, count] : order.items) {
+                message << ' ' << type << " x" << count;
+            }
+            Logger::log(message.str());
+
+            return std::make_shared<PickingTask>(order, maxLoaders, storage_, packing_, shipping_, timeUnit_);
         }
     }
 }

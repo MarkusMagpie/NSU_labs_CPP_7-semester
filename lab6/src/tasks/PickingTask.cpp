@@ -5,14 +5,30 @@
 #include <utils/Logger.h>
 #include <workers/Loader.h>
 
-PickingTask::PickingTask(const Order& order, int maxLoaders) : order_(order), maxLoaders_(maxLoaders) {}
+PickingTask::PickingTask(const Order& order, int maxLoaders,
+    StorageZone& storage, PackingZone& packing, ShippingZone& shipping,
+    std::chrono::milliseconds timeUnit)
+    : order_(order), 
+    maxLoaders_(maxLoaders),
+    storage_(storage), 
+    packing_(packing), 
+    shipping_(shipping), 
+    timeUnit_(timeUnit),
+    progress_{order.items, {}} {}
 
 void PickingTask::execute(Loader& loader) {
-    Logger::log("Грузчик #" + std::to_string(loader.id()) + " комплектует заказ #" + std::to_string(order_.id)
-                + " в город " + std::to_string(order_.city) + " (до " + std::to_string(maxLoaders_) + " грузчиков)");
-    std::this_thread::sleep_for(loader.actionTime());  // заглушка: TODO шаг 9, действия комплектации по ТЗ
+    Logger::log("Грузчик #" + std::to_string(loader.id()) 
+    + " комплектует заказ #" + std::to_string(order_.id)
+    + " в город " + std::to_string(order_.city) 
+    + " (до " + std::to_string(maxLoaders_) + " грузчиков)");
+
+    std::this_thread::sleep_for(loader.actionTime());  // заглушка
 }
 
 std::string PickingTask::name() const {
     return "Комплектация";
+}
+
+const Order& PickingTask::order() const {
+    return order_;
 }

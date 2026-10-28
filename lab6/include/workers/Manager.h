@@ -12,6 +12,7 @@
 
 #include <tasks/InventoryTask.h>
 #include <tasks/TaskQueue.h>
+#include <zones/PackingZone.h>
 #include <zones/ReceivingDock.h>
 #include <zones/ShippingZone.h>
 #include <zones/StorageZone.h>
@@ -27,6 +28,8 @@ private:
     ReceivingDock& dock_; // зона приемки: машина должна занять слот до постановки задачи разгрузки
     StorageZone& storage_; // зона хранения склада; нужна задачам разгрузки
     ShippingZone& shipping_; // зона отправки: сюда менеджер ставит приехавшие машины для отправки
+    PackingZone& packing_; // зона упаковки: столы комплектации; нужна задачам комплектации
+    std::chrono::milliseconds timeUnit_; // единица времени склада (1 с / 1 мс): нужна задачам комплектации
     // общий для всех менеджеров лимит: сколько задач еще можно поставить за смену (принадлежит Warehouse)
     std::atomic<int>& tasksLeft_;
     
@@ -39,7 +42,8 @@ private:
     // atomic - потому что его одновременно увеличивают потоки разных менеджеров
     static std::atomic<int> nextId_;
 
-    // создать случайную задачу; nullptr, если задачу поставить не удалось (нет свободного слота приемки)
+    // создать случайную задачу; nullptr, если задачу поставить не удалось
+    // (нет свободного слота приемки или на складе не хватает товара для заказа)
     std::shared_ptr<Task> createRandomTask(std::mt19937& gen, std::stop_token stopToken);
 
     // забрать и вывести уже готовые отчеты инвентаризации (не ждет неготовые)
@@ -55,6 +59,8 @@ public:
         ReceivingDock& dock, 
         StorageZone& storage,
         ShippingZone& shipping,
+        PackingZone& packing,
+        std::chrono::milliseconds timeUnit,
         std::atomic<int>& tasksLeft);
 
     int id() const;
