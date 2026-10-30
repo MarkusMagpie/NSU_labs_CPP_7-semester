@@ -18,7 +18,7 @@
 class PickingTask : public Task {
 private:
     Order order_; // какой заказ собирать
-    int maxLoaders_; // сколько грузчиков максимум могут одновременно работать над задачей
+    int maxLoaders_; // максимум могут одновременно работать над задачей
 
     // зоны склада с которыми работает комплектация
     StorageZone& storage_; // ЗХ - брать и возвращать паллеты хранения
@@ -82,6 +82,12 @@ private:
 
     // 6-7 - вернуть паллеты хранения опустевшие или больше не нужные заказу; all - вернуть все
     void returnPallets(Loader& loader, bool all);
+
+    // смена закончилась посреди заказа: убрать за собой:
+    // паллеты хранения на полки, бронь стола,
+    // резерв еще не взятого товара); 
+    // собранные паллеты отправки остаются на столе
+    TaskResult stopPicking(Loader& loader);
 public:
     PickingTask(const Order& order, 
         int maxLoaders,
@@ -90,7 +96,7 @@ public:
         ShippingZone& shipping,
         std::chrono::milliseconds timeUnit);
 
-    void execute(Loader& loader) override;
+    TaskResult execute(Loader& loader) override;
     std::string name() const override;
 
     const Order& order() const;

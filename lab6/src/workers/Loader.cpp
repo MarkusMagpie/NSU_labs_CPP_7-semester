@@ -63,7 +63,12 @@ void Loader::run(std::stop_token stopToken) {
                 queue_.push(task);
             }
             // 3) сам вне зависимости от 2) начинаю делать задачу
-            task->execute(*this);
+            // 4) задача не смогла продолжиться (нет стола || нет машины || хз уже) 
+            // -> возвращаю ее в очередь
+            if (task->execute(*this) == TaskResult::Requeue) {
+                queue_.push(task);
+                Logger::log("Грузчик #" + std::to_string(id_) + " вернул задачу \"" + task->name() + "\" в очередь");
+            }
         } else if (!stopToken.stop_requested()) {
             Logger::log("Грузчик #" + std::to_string(id_) + " отдохнул, так как задач в очереди не было");
         }

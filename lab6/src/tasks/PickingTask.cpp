@@ -17,30 +17,38 @@ PickingTask::PickingTask(const Order& order, int maxLoaders,
     timeUnit_(timeUnit),
     progress_{order.items, {}} {}
 
-void PickingTask::execute(Loader& loader) {
+TaskResult PickingTask::execute(Loader& loader) {
     // 1 - заказ от менеджера на комплектацию уже получен
     Logger::log(who(loader) + " комплектует заказ в город " 
         + std::to_string(order_.city)
         + " (до " + std::to_string(maxLoaders_) + " грузчиков)");
 
     // 2 - забронировать стол
+    // 2a - не удалось за 5 единиц: грузчик пока один на задаче -> он последний -> задачу в очередь
     if (tableState_.table == -1 && !bookTable(loader)) {
-        return;
+        // bookTable вернул -1 и при остановке: тогда не "все столы заняты", а конец смены
+        if (loader.stopRequested()) {
+            return stopPicking(loader);
+        }
+        return TaskResult::Requeue;
     }
 
     bool waitingForPallets = false;
     while (true) {
         if (loader.stopRequested()) {
-            Logger::log(who(loader) + " прервал комплектацию, так как его смена закончилась");
-            
-            return; // TODO: вернуть паллеты на полки и снять резерв
+            return stopPicking(loader);
         }
 
         // паллеты отправки оставшиеся на столе с прошлого раза
         if (!shipReadyPallets(loader)) {
+            // ship() прерывается и при остановке -> это не 5 неудачных попыток
+            if (loader.stopRequested()) {
+                return stopPicking(loader);
+            }
             returnPallets(loader, true);
 
-            return; // TODO: задача со состоянием стола -> обратно в очередь
+            // 3c ЗО: паллета отправки осталась на столе, стол забронирован -> задача со состоянием в очередь
+            return TaskResult::Requeue;
         }
 
         std::optional<ProductType> type = currentType();
@@ -69,12 +77,15 @@ void PickingTask::execute(Loader& loader) {
 
         // 4-5
         bool shipped = moveUnits(loader, *type);
+        if (!shipped && loader.stopRequested()) {
+            return stopPicking(loader); // ship() прервала остановка
+        }
 
         // шаги 6-7: паллеты этого вида опустели или больше не нужны заказу.
         // Если отправить не удалось - возвращаю все: паллеты хранения нужны и другим заказам
         returnPallets(loader, !shipped);
         if (!shipped) {
-            return; // TODO: задача со состоянием стола -> обратно в очередь
+            return TaskResult::Requeue;
         }
 
         // 8 -> заказ еще нуждается в комплектовке -> повторить с 3
@@ -91,6 +102,8 @@ void PickingTask::execute(Loader& loader) {
         + std::to_string(tableState_.table) + " освобожден");
 
     tableState_.table = -1;
+
+    return TaskResult::Done;
 }
 
 
@@ -107,8 +120,11 @@ bool PickingTask::bookTable(Loader& loader) {
     // 2a - не дольше 5 единиц времени
     int table = packing_.bookTable(loader.stopToken(), timeUnit_ * limits::kTimeoutUnits);
     if (table < 0) {
-        Logger::log(who(loader) + " не смог забронировать стол комплектации: все заняты");
-        
+        // при остановке лог напишет stopPicking
+        if (!loader.stopRequested()) {
+            Logger::log(who(loader) + " не смог забронировать стол комплектации: все заняты");
+        }
+
         return false;
     }
 
@@ -247,8 +263,15 @@ bool PickingTask::shipPallet(Loader& loader, int index) {
 
     std::ostringstream message;
     message << who(loader) << ' ';
+    if (!result.shipped && loader.stopRequested()) {
+        // не дождался машину из-за конца смены, а не за 5 попыток
+        message << "прервал отправку паллеты (" << pallet << "): смена закончилась, паллета осталась на столе";
+        Logger::log(message.str());
+
+        return false;
+    }
     if (!result.shipped) {
-        message << "не смог отправить паллету отправки (" << pallet 
+        message << "не смог отправить паллету отправки (" << pallet
             << ") за " << result.attempts
             << " попыток: нет машины в город " 
             << order_.city << ", паллета возвращена на стол";
@@ -292,6 +315,12 @@ void PickingTask::returnPallets(Loader& loader, bool all) {
     // паллеты хранения
     std::vector<StorageZone::CheckedOutPallet>& pallets = tableState_.sortPallets;
 
+    auto act = [&loader] {
+        if (!loader.stopRequested()) {
+            std::this_thread::sleep_for(loader.actionTime());
+        }
+    };
+
     for (auto it = pallets.begin(); it != pallets.end(); ) {
         std::ostringstream message;
         message << who(loader) << ' ';
@@ -299,16 +328,16 @@ void PickingTask::returnPallets(Loader& loader, bool all) {
         if (it->count == 0) {
             // 6a - паллета опустела
             // отметить в терминале ЗУ что слот на полке освобожден
-            std::this_thread::sleep_for(loader.actionTime());
-            
-            message << "опустошил паллету " << it->address 
+            act();
+
+            message << "опустошил паллету " << it->address
                 << ", место на полке освобождено";
         } else if (all || progress_.remaining.at(it->type) == 0) {
             // 7 - товар на паллете заказу больше не нужен
             // 7a - отвезти по исходному адресу
-            std::this_thread::sleep_for(loader.actionTime());
+            act();
             // 7b - отметить в терминале ЗУ что паллета на месте
-            std::this_thread::sleep_for(loader.actionTime());
+            act();
             
             message << "вернул паллету " << it->address 
                 << " (" << it->type << " x" << it->count << ") на полку";
@@ -323,6 +352,38 @@ void PickingTask::returnPallets(Loader& loader, bool all) {
 
         it = pallets.erase(it);
     }
+}
+
+TaskResult PickingTask::stopPicking(Loader& loader) {
+    // 1) паллеты хранения со стола обратно на полки
+    returnPallets(loader, true);
+
+    // 2) бронь стола снять
+    if (tableState_.table != -1) {
+        packing_.releaseTable(tableState_.table);
+    }
+
+    // 3) резерв еще НЕ взятого товара свободен для других заказов.
+    storage_.releaseReservation(progress_.remaining);
+
+    // 4) собранные паллеты отправки остаются на столе
+    int packedUnits = 0;
+    for (const Pallet& pallet : tableState_.packPallets) {
+        packedUnits += pallet.count;
+    }
+
+    Logger::log(who(loader) + " прервал комплектацию: смена закончилась"
+        + (tableState_.table != -1 ? ", стол " + std::to_string(tableState_.table) + " освобожден" : "")
+        + ", резерв снят; на паллетах отправки осталось " + std::to_string(packedUnits) + " шт");
+
+    // задача больше не выполняется
+    tableState_.table = -1;
+    for (auto& [type, count] : progress_.remaining) {
+        count = 0;
+    }
+
+    // смена закончилась -> в очередь не возвращаю
+    return TaskResult::Done;
 }
 
 std::string PickingTask::name() const {

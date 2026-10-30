@@ -19,7 +19,7 @@ public:
 
     InventoryTask(int id, const std::vector<ProductType>& types, StorageZone& storage);
 
-    void execute(Loader& loader) override;
+    TaskResult execute(Loader& loader) override;
     std::string name() const override;
 
     // пока задачу никто не взял в работу, ее могут получать другие грузчики

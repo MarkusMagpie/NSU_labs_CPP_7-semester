@@ -37,7 +37,7 @@ private:
 public:
     UnloadTask(const Truck& truck, int slot, ReceivingDock& dock, StorageZone& storage);
 
-    void execute(Loader& loader) override;
+    TaskResult execute(Loader& loader) override;
     std::string name() const override;
 
     // пока в машине есть невзятые паллеты к ней могут подключиться еще грузчики 

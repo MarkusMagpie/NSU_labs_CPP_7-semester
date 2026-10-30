@@ -9,14 +9,14 @@
 InventoryTask::InventoryTask(int id, const std::vector<ProductType>& types, StorageZone& storage)
     : id_(id), types_(types), storage_(storage) {}
 
-void InventoryTask::execute(Loader& loader) {
+TaskResult InventoryTask::execute(Loader& loader) {
     std::string who = "Грузчик #" + std::to_string(loader.id());
     std::string taskName = "инвентаризацию #" + std::to_string(id_);
 
     // exchange: поставить true и вернуть прежнее значение
     if (taken_.exchange(true)) {
         Logger::log(who + ": " + taskName + " уже выполняет другой грузчик, отказываюсь");
-        return;
+        return TaskResult::Done;
     }
 
     std::ostringstream start;
@@ -37,6 +37,8 @@ void InventoryTask::execute(Loader& loader) {
     promise_.set_value(std::move(reports));
     
     Logger::log(who + " закончил " + taskName + ", отчеты переданы менеджеру");
+
+    return TaskResult::Done;
 }
 
 std::string InventoryTask::name() const {

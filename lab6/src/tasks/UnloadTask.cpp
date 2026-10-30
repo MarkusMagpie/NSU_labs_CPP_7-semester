@@ -29,7 +29,7 @@ bool UnloadTask::markPlaced() {
     return placedPallets_ == static_cast<int>(truck_.pallets.size());
 }
 
-void UnloadTask::execute(Loader& loader) {
+TaskResult UnloadTask::execute(Loader& loader) {
     std::string who = "Грузчик #" + std::to_string(loader.id());
     std::string truckName = "машины #" + std::to_string(truck_.id);
     Logger::log(who + " начал разгрузку " + truckName + " в слоте " + std::to_string(slot_)
@@ -39,7 +39,7 @@ void UnloadTask::execute(Loader& loader) {
         // проверка смены ДО взятия паллеты
         if (loader.stopRequested()) {
             Logger::log(who + " прервал разгрузку " + truckName + ", так как его смена закончилась");
-            return;
+            return TaskResult::Done;
         }
 
         // 1 взять товар на паллете из машины
@@ -102,6 +102,8 @@ void UnloadTask::execute(Loader& loader) {
     }
 
     Logger::log(who + " закончил работу с " + truckName + ": невзятых паллет не осталось");
+
+    return TaskResult::Done;
 }
 
 bool UnloadTask::needsMoreLoaders() {
