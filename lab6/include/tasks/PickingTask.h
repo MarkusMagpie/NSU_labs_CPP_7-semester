@@ -35,59 +35,93 @@ private:
         std::map<ProductType, int> shipped;
     };
 
+    // паллета отправки на столе; id чтобы найти ее после ship(): пока ее везли, другие грузчики
+    // могли удалить из вектора другие паллеты и индекс сдвинулся
+    struct PackPallet {
+        int id = 0;
+        Pallet pallet;
+        bool shipping = false; // ее сейчас везет в ЗО какой-то грузчик (слот упаковки она все еще занимает)
+    };
+
     // СОСТОЯНИЕ СТОЛА КОМПЛЕКТАЦИИ В ЗУ
     struct TableState {
         // забронированный стол
         int table = -1;
+        // какой-то грузчик сейчас бронирует стол -> остальные ждут
+        bool booking = false;
         // паллеты хранения (в слоте разбора)
         std::vector<StorageZone::CheckedOutPallet> sortPallets;
+        // паллеты хранения, которые сейчас несут на стол: слот разбора уже за ними, товар уже "наш"
+        int incomingPallets = 0;
+        std::map<ProductType, int> incomingUnits;
         // паллеты отправки (в слоте упаковки)
-        std::vector<Pallet> packPallets;
+        std::vector<PackPallet> packPallets;
+        int nextPackId = 0;
     };
 
-    // один мьютекс на состояния заказа и стола т.к. меняются вместе
+    // защищает поля ниже
     std::mutex state_mutex_;
-    
+
     OrderProgress progress_;
     TableState tableState_;
+    int activeLoaders_ = 0; // сколько грузчиков сейчас выполняют задачу
+    bool finished_ = false; // заказ собран или прерван остановкой: присоединяться больше нельзя
+
+    // почему грузчик уходит с задачи
+    enum class LeaveReason {
+        NoWork, // собирать больше нечего (последний -> заказ готов)
+        Failed, // не дали стол / не отправил паллету за 5 попыток (последний -> задачу в очередь)
+        Stop // смена закончилась (последний -> убрать за собой)
+    };
+
+    // чем закончилась попытка переложить единицу
+    enum class MoveResult {
+        Moved, // переложил
+        NoUnits, // на столе нет паллет хранения этого вида с товаром
+        NoPackSlot // оба слота упаковки заняты (паллеты везут в ЗО)
+    };
 
     // ШАГИ АЛГОРИТМА КОМПЛЕКТАЦИИ по ТЗ зоны упаковки -------------------
+    // !!! ...Locked - вызывать только под захваченным state_mutex_
 
     // "Грузчик #А [заказ #Б]"
     std::string who(const Loader& loader) const;
+
+    // 1 - встать на задачу если на ней меньше maxLoaders_ грузчиков и заказ не закончен
+    bool tryJoin(Loader& loader);
+
+    // уйти с задачи; последний ушедший решает судьбу задачи (см. LeaveReason)
+    TaskResult leave(Loader& loader, LeaveReason reason);
 
     // 2 - забронировать стол комплектации
     bool bookTable(Loader& loader);
 
     // какой вид товара сейчас собирать
-    std::optional<ProductType> currentType() const;
+    std::optional<ProductType> currentTypeLocked() const;
 
-    // 3 - забрать паллеты хранения вида type на стол комплектации (ЗХ -> ЗУ)
-    void fetchPallets(Loader& loader, ProductType type);
+    // 3 - начать нести паллету хранения вида type (занять слот разбора); nullopt + причина - нести нечего
+    std::optional<StorageZone::CheckedOutPallet> startFetchLocked(ProductType type, std::string& waitReason);
+    // 3 - донести паллету и поставить на стол (3 действия)
+    void finishFetch(Loader& loader, const StorageZone::CheckedOutPallet& pallet);
 
-    // 4 - перекладывать по единице с паллет хранения на паллету отправки
-    bool moveUnits(Loader& loader, ProductType type);
+    // 4 - переложить одну единицу с паллеты хранения на паллету отправки (изменение состояния)
+    MoveResult moveUnitLocked(ProductType type);
 
     // паллета отправки типа type на которую еще можно класть или новая в свободном слоте упаковки
-    int packPalletFor(ProductType type);
+    int packPalletForLocked(ProductType type);
 
     // паллета отправки готова: заполнена или этого вида заказу больше не нужно
-    bool isReady(const Pallet& pallet) const;
+    bool isReadyLocked(const Pallet& pallet) const;
 
-    // 5 - отметить готовность паллеты отправки index и отвезти в ЗО (ship)
-    bool shipPallet(Loader& loader, int index);
+    // 5 - готовая паллета отправки которую еще никто не везет -> "везу я"
+    std::optional<PackPallet> claimReadyPackPalletLocked();
+    // 5 - отметить готовность и отвезти в ЗО (ship); false - не отправлена, паллета снова на столе
+    bool shipPallet(Loader& loader, const PackPallet& packPallet);
 
-    // отправить все готовые паллеты отправки (например, оставшиеся на столе после неудачной попытки)
-    bool shipReadyPallets(Loader& loader);
-
-    // 6-7 - вернуть паллеты хранения опустевшие или больше не нужные заказу; all - вернуть все
-    void returnPallets(Loader& loader, bool all);
-
-    // смена закончилась посреди заказа: убрать за собой:
-    // паллеты хранения на полки, бронь стола,
-    // резерв еще не взятого товара); 
-    // собранные паллеты отправки остаются на столе
-    TaskResult stopPicking(Loader& loader);
+    // 6-7 - паллета хранения опустела или заказу этот вид больше не нужен -> снять ее со стола комп
+    std::optional<StorageZone::CheckedOutPallet> takeUselessSortPalletLocked();
+    // 6-7 - вернуть паллету хранения на полку
+    void returnPallet(Loader& loader, const StorageZone::CheckedOutPallet& pallet);
 public:
     PickingTask(const Order& order, 
         int maxLoaders,
@@ -98,6 +132,9 @@ public:
 
     TaskResult execute(Loader& loader) override;
     std::string name() const override;
+
+    // есть ли место еще для одного грузчика? (кроме того кто сейчас вынул задачу из очереди)
+    bool needsMoreLoaders() override;
 
     const Order& order() const;
 };
