@@ -51,7 +51,7 @@ void Loader::run(std::stop_token stopToken) {
     stopToken_ = stopToken; // чтобы задачи могли спросить stopRequested()
     Logger::log("Грузчик #" + std::to_string(id_) + " начал смену");
 
-    // пока никто не попросил остановиться
+    // пока склад не попросил остановиться
     while (!stopToken.stop_requested()) {
         // 1) вынул задачу; в очереди ее больше нет
         std::shared_ptr<Task> task = queue_.pop(stopToken, restTime_);

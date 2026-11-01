@@ -65,7 +65,7 @@ private:
     OrderProgress progress_;
     TableState tableState_;
     int activeLoaders_ = 0; // сколько грузчиков сейчас выполняют задачу
-    bool finished_ = false; // заказ собран или прерван остановкой: присоединяться больше нельзя
+    bool finished_ = false; // заказ собран или прерван остановкой: присоединяться к задаче больше нельзя
 
     // почему грузчик уходит с задачи
     enum class LeaveReason {
@@ -120,7 +120,7 @@ private:
 
     // 6-7 - паллета хранения опустела или заказу этот вид больше не нужен -> снять ее со стола комп
     std::optional<StorageZone::CheckedOutPallet> takeUselessSortPalletLocked();
-    // 6-7 - вернуть паллету хранения на полку
+    // 6-7 - вернуть паллету хранения на полку в ЗХ
     void returnPallet(Loader& loader, const StorageZone::CheckedOutPallet& pallet);
 public:
     PickingTask(const Order& order, 

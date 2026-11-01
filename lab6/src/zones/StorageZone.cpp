@@ -226,6 +226,7 @@ std::optional<StorageZone::CheckedOutPallet> StorageZone::checkoutPallet(Product
     return std::nullopt;
 } // mutex.unlock()
 
+// ЗХ -> ЗУ
 void StorageZone::takeUnits(const StorageAddress& address, int count) {
     std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
 
@@ -239,12 +240,15 @@ void StorageZone::takeUnits(const StorageAddress& address, int count) {
     place.count -= count;
 } // mutex.unlock()
 
+// ЗУ -> ЗХ
 void StorageZone::returnPallet(const StorageAddress& address) {
     std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
 
     StoragePlace& place = racks_[address.rack].shelves[address.shelf].places[address.place];
+    // если паллета не в ЗУ то она уже на полке ЗХ
     if (!place.onTable) {
         Logger::log("ОШИБКА returnPallet: паллета и так на полке");
+
         return;
     }
 

@@ -36,7 +36,7 @@ TaskResult UnloadTask::execute(Loader& loader) {
         + " (" + std::to_string(truck_.pallets.size()) + " паллет)");
 
     while (true) {
-        // проверка смены ДО взятия паллеты
+        // проверка флага остановки смены ДО взятия паллеты
         if (loader.stopRequested()) {
             Logger::log(who + " прервал разгрузку " + truckName + ", так как его смена закончилась");
             return TaskResult::Done;

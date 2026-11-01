@@ -54,7 +54,7 @@ TaskResult PickingTask::execute(Loader& loader) {
                 continue;
             }
             tableState_.booking = true; // бронирую я, а остальные будут ждать
-            lock.unlock();
+            lock.unlock();    // mutex unlock()
             lastWait.clear();
 
             if (!bookTable(loader)) {
@@ -67,7 +67,7 @@ TaskResult PickingTask::execute(Loader& loader) {
         // 5 - на столе есть готовая к отправке паллета отправки которую никто не везет
         // (заполнил я или другой лодер, или она осталась после неудачной попытки? а хуй его знает)
         if (std::optional<PackPallet> ready = claimReadyPackPalletLocked()) {
-            lock.unlock();
+            lock.unlock();     // mutex.unlock()
             lastWait.clear();
 
             if (!shipPallet(loader, *ready)) {
@@ -145,8 +145,8 @@ bool PickingTask::tryJoin(Loader& loader) {
     std::string message;
     bool joined = false;
     {
-        // проверка и ++ - одной операцией под мьютексом: иначе двое одновременно увидят
-        // "есть место" и грузчиков станет больше maxLoaders_ (как truckId в ShippingZone::load)
+        // проверка и ++ - одной операцией под мьютексом: иначе два грузчика одновременно увидят что
+        // есть место и их станет больше чем maxLoaders_ (как truckId в ShippingZone::load)
         std::lock_guard<std::mutex> lock(state_mutex_);
 
         if (finished_) {
@@ -175,10 +175,11 @@ TaskResult PickingTask::leave(Loader& loader, LeaveReason reason) {
         // уборку стола, резерва сделает тот кто уйдет последним
         lock.unlock();
         Logger::log(who(loader) + " уходит с задачи, на ней остаются грузчиков: " + std::to_string(left));
+        
         return TaskResult::Done;
     }
 
-    // Я ПОСЛЕДНИЙ. Пока я был на задаче, никто другой не мог стать последним -> уборка только здесь
+    // Я ПОСЛЕДНИЙ - уборка стола выполняется только здесь
     if (reason == LeaveReason::NoWork) {
         // 9 - заказ собран: паллеты хранения уже вернули по шагам 6-7, паллеты отправки уехали
         finished_ = true;
@@ -188,8 +189,10 @@ TaskResult PickingTask::leave(Loader& loader, LeaveReason reason) {
 
         // 9b - отменить бронирование стола
         std::this_thread::sleep_for(loader.actionTime());
+
         packing_.releaseTable(table);
         Logger::log(who(loader) + " собрал и отправил заказ, стол " + std::to_string(table) + " освобожден");
+
         return TaskResult::Done;
     }
 
@@ -199,12 +202,13 @@ TaskResult PickingTask::leave(Loader& loader, LeaveReason reason) {
 
     if (reason == LeaveReason::Failed) {
         // ТЗ 2a / 3c: последний -> задачу в очередь со всем состоянием (бронь стола, паллеты отправки).
-        // Паллеты хранения возвращаю: ждущая в очереди задача не должна держать товар других заказов
+        // паллеты хранения возвращаю в ЗХ: ждущая в очереди задача не должна держать товар других заказов
         lock.unlock();
         for (const StorageZone::CheckedOutPallet& pallet : pallets) {
             returnPallet(loader, pallet);
         }
         Logger::log(who(loader) + " последний на задаче, возвращает ее в очередь");
+
         return TaskResult::Requeue;
     }
 
@@ -263,7 +267,7 @@ bool PickingTask::bookTable(Loader& loader) {
 
     Logger::log(who(loader) + " забронировал стол "
         + std::to_string(table)
-        + " (слотов для разбора: "
+        + " (слотов для разбора паллет: "
         + std::to_string(packing_.sortSlots(table)) + ")");
 
     return true;
@@ -333,6 +337,7 @@ void PickingTask::finishFetch(Loader& loader, const StorageZone::CheckedOutPalle
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
+
         tableState_.sortPallets.push_back(pallet); // палета теперь на столе
         --tableState_.incomingPallets;
         tableState_.incomingUnits[pallet.type] -= pallet.count;
