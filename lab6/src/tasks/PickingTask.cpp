@@ -366,6 +366,7 @@ PickingTask::MoveResult PickingTask::moveUnitLocked(ProductType type) {
         return MoveResult::NoPackSlot;
     }
 
+    // ЗХ -> ЗУ
     storage_.takeUnits(sortPallet->address, 1);
     --sortPallet->count;
     --progress_.remaining.at(type);
