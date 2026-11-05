@@ -43,6 +43,20 @@ target_link_libraries(lab7_protocol PUBLIC
   lab7_common
 )
 
+# клиентская библиотека
+add_library(lab7_client STATIC
+  src/client/BrokerClient.cpp
+)
+target_include_directories(lab7_client PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+target_link_libraries(lab7_client PUBLIC
+  PkgConfig::ZMQ
+)
+
+# для проверки связи с брокером
+add_executable(test_client src/test_client.cpp)
+target_link_libraries(test_client PRIVATE lab7_client)
 
 add_executable(broker src/broker_main.cpp)
 target_link_libraries(broker PRIVATE

@@ -2,7 +2,6 @@
 
 #include <common/Logger.hpp>
 #include <common/YamlConfig.hpp>
-#include <protocol/Envelope.hpp>
 #include <zmq.hpp>
 
 int main(int argc, char* argv[]) {
@@ -30,13 +29,22 @@ int main(int argc, char* argv[]) {
     router.bind(config.bind); // сокет router привязывается к адресу в переменной bind
     Logger::log("Брокер слушает " + config.bind);
 
-    // todo 3 - обрабатывать сообщения на порту
+    // 3 - ROUTER получает сначала идентификатор клиента, затем части сообщения
+    while (true) {
+        zmq::message_t identity;
+        if (!router.recv(identity, zmq::recv_flags::none)) {
+            continue;
+        }
 
-    // 3 - тест сериализации конверта
-    Envelope probe;
-    probe.type = MsgType::Ok;
-    probe.queue = "smoke";
-    Logger::log("Проверка конверта: " + probe.toJson());
-
-    return 0;
+        while (identity.more()) {
+            zmq::message_t part;
+            if (!router.recv(part, zmq::recv_flags::none)) {
+                break;
+            }
+            Logger::log("Получена часть сообщения: " + part.to_string());
+            if (!part.more()) {
+                break;
+            }
+        }
+    }
 }
