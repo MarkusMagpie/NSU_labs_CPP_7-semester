@@ -1,0 +1,14 @@
+broker:
+  bind: "tcp://*:5555"
+  data_dir: "data"
+
+queues:
+  - name: "HighPriorityQueue"
+    durability: "disk"
+    order: "fifo"
+    message_ttl: 300
+
+  - name: "LogsQueue"
+    durability: "memory"
+    order: "sorted"
+    sort_key: "timestamp"
