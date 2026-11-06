@@ -8,11 +8,11 @@
 
 // тип сообщения в брокере
 enum class MsgType {
-    DeclareProducer,    // производитель/producer объявляет QoS
+    DeclareProducer,    // производитель/producer -> брокер: объявляет QoS
     Produce,            // производитель -> брокер: новое сообщение
 
-    Subscribe,          // потребитель/consumer -> брокер: подписка
-    Unsubscribe,        // потребитель -> брокер: отписка
+    Subscribe,          // потребитель/consumer -> брокер: подписка на очередь в брокере
+    Unsubscribe,        // потребитель -> брокер: отписка от очереди
     Ack,                // потребитель -> брокер: подтверждение обработки
     
     Deliver,            // брокер -> потребитель: доставка сообщения
@@ -57,8 +57,11 @@ struct Envelope {
     */
     std::int64_t timestamp = 0; // время создания, мс
     std::optional<int> ackTimeoutMs; // таймаут подтверждения (для consumer withack)
+    
+    std::optional<ProducerQos> producerQos; // для declare_producer
+    std::optional<ConsumerQos> consumerQos; // для subscribe
 
-    /*Передача данных между клиентами и брокером должна осуществляться в выбранном переносимом формате сообщений - выбрал json формат*/
+    /*Передача данных между клиентами и брокером должна осуществляться в выбранном переносимом формате сообщений - я выбрал json формат*/
     nlohmann::json payload = nullptr;
 
     std::string toJson() const;

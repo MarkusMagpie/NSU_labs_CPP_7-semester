@@ -12,6 +12,8 @@ public:
     // отправить брокеру одну часть сообщения
     void send(const std::string& message);
 
+    // ждать часть сообщения с ответом брокера
+    std::string receive();
 private:
     zmq::context_t context_; // объект внутри которого создаются сокеты
     zmq::socket_t socket_;

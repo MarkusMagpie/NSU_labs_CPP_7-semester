@@ -14,3 +14,12 @@ void BrokerClient::send(const std::string& message) {
         throw std::runtime_error("Не удалось отправить сообщение брокеру");
     }
 }
+
+std::string BrokerClient::receive() {
+    zmq::message_t reply;
+    if (!socket_.recv(reply, zmq::recv_flags::none)) {
+        throw std::runtime_error("Не удалось получить ответ брокера");
+    }
+    
+    return reply.to_string();
+}

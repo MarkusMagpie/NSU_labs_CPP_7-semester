@@ -16,6 +16,45 @@ constexpr const char* kTypeNames[] = {
 };
 
 constexpr int kTypeCount = static_cast<int>(sizeof(kTypeNames) / sizeof(kTypeNames[0]));
+
+const char* producerQosName(ProducerQos qos) {
+    switch (qos) {
+        case ProducerQos::None: return "none";
+        case ProducerQos::BrokerAck: return "broker_ack";
+        case ProducerQos::ConsumerAck: return "consumer_ack";
+    }
+
+    throw std::runtime_error("protocol: неизвестный QoS производителя");
+}
+
+ProducerQos parseProducerQos(const std::string& value) {
+    if (value == "none") {
+        return ProducerQos::None;
+    }
+    if (value == "broker_ack") return ProducerQos::BrokerAck;
+    if (value == "consumer_ack") return ProducerQos::ConsumerAck;
+    
+    throw std::runtime_error("protocol: неизвестный QoS производителя: " + value);
+}
+
+const char* consumerQosName(ConsumerQos qos) {
+    switch (qos) {
+        case ConsumerQos::NoAck: return "no_ack";
+        case ConsumerQos::WithAck: return "with_ack";
+        case ConsumerQos::Recovery: return "recovery";
+    }
+
+    throw std::runtime_error("protocol: неизвестный QoS потребителя");
+}
+
+ConsumerQos parseConsumerQos(const std::string& value) {
+    if (value == "no_ack") return ConsumerQos::NoAck;
+    if (value == "with_ack") return ConsumerQos::WithAck;
+    if (value == "recovery") return ConsumerQos::Recovery;
+
+    throw std::runtime_error("protocol: неизвестный QoS потребителя: " + value);
+}
+
 } // namespace
 
 std::string Envelope::typeToString(MsgType type) {
@@ -47,6 +86,8 @@ std::string Envelope::toJson() const {
 
     if (sortKey) j["sort_key"] = *sortKey;
     if (ackTimeoutMs) j["ack_timeout_ms"] = *ackTimeoutMs;
+    if (producerQos) j["producer_qos"] = producerQosName(*producerQos);
+    if (consumerQos) j["consumer_qos"] = consumerQosName(*consumerQos);
 
     j["payload"] = payload;
 
@@ -72,6 +113,13 @@ Envelope Envelope::fromJson(const std::string& text) {
     }
     if (j.contains("ack_timeout_ms") && !j["ack_timeout_ms"].is_null()) {
         envelope.ackTimeoutMs = j["ack_timeout_ms"].get<int>();
+    }
+
+    if (j.contains("producer_qos")) {
+        envelope.producerQos = parseProducerQos(j.at("producer_qos").get<std::string>());
+    }
+    if (j.contains("consumer_qos")) {
+        envelope.consumerQos = parseConsumerQos(j.at("consumer_qos").get<std::string>());
     }
 
     envelope.payload = j.value("payload", nlohmann::json(nullptr));

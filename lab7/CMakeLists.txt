@@ -56,7 +56,7 @@ target_link_libraries(lab7_client PUBLIC
 
 # для проверки связи с брокером
 add_executable(test_client src/test_client.cpp)
-target_link_libraries(test_client PRIVATE lab7_client)
+target_link_libraries(test_client PRIVATE lab7_client lab7_protocol)
 
 add_executable(broker src/broker_main.cpp)
 target_link_libraries(broker PRIVATE
