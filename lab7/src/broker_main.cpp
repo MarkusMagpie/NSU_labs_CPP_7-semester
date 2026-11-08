@@ -1,10 +1,13 @@
 #include <exception>
-#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
+#include <broker/QueueManager.hpp>
 #include <common/Logger.hpp>
 #include <common/YamlConfig.hpp>
 #include <protocol/Envelope.hpp>
@@ -29,6 +32,9 @@ int main(int argc, char* argv[]) {
         Logger::log(line);
     }
 
+    QueueManager queues(config.queues);
+    std::uint64_t nextMessageId = 1;
+
     // 2 - ZeroMQ привязь сокета на адрес из yaml конфига 
     zmq::context_t context(1);
     zmq::socket_t router(context, zmq::socket_type::router);
@@ -39,6 +45,7 @@ int main(int argc, char* argv[]) {
     struct Subscription {
         ConsumerQos qos; // уровень QoS потребителя
         std::optional<int> ackTimeoutMs;
+        std::size_t nextMessage = 0; // позиция следующего сообщения для NoAck
     };
 
     // identity клиента -> QoS производителя (пополняется declare_producer)
@@ -76,6 +83,8 @@ int main(int argc, char* argv[]) {
 
         // разбор json фрейма + составление ответа ROUTERа клиенту
         Envelope reply;
+        bool sendReply = true;
+        std::size_t* cursorToAdvance = nullptr;
         try {
             Envelope envelope = Envelope::fromJson(body);
             Logger::log("Получен конверт: type=" + Envelope::typeToString(envelope.type) 
@@ -98,17 +107,8 @@ int main(int argc, char* argv[]) {
                     throw std::runtime_error("Для subscribe требуются queue и consumer_qos");
                 }
                 
-                // поиск в config.queues описания очереди с именем, переданным клиентом
-                const auto queue = std::find_if(
-                    config.queues.begin(), 
-                    config.queues.end(),
-                    [&envelope](const QueueConfig& item) { 
-                        return item.name == envelope.queue; 
-                    }
-                );
-                if (queue == config.queues.end()) {
-                    throw std::runtime_error("Неизвестная очередь: " + envelope.queue);
-                }
+                // подписка возможна только на очередь поддерживаемую на текущем этапе разработки
+                queues.get(envelope.queue);
 
                 // по ТЗ потребитель с подтверждением задает период ожидания подтверждения при подписке
                 if (*envelope.consumerQos == ConsumerQos::WithAck
@@ -125,6 +125,43 @@ int main(int argc, char* argv[]) {
 
                 reply.queue = envelope.queue;
                 reply.payload = "Подписка зарегистрирована";
+            } else if (envelope.type == MsgType::Receive) {
+                /* пример сообщения клиента брокеру для получения письма
+                {"type": "receive", "queue": "MemoryFifoQueue"}
+                */
+                if (envelope.queue.empty()) {
+                    throw std::runtime_error("Для receive требуется queue");
+                }
+
+                // проверка имени очереди и настройки подписки у клиента
+                auto clientSubscriptions = subscriptions.find(client);
+                if (clientSubscriptions == subscriptions.end()) {
+                    throw std::runtime_error("Клиент не подписан на очередь: " + envelope.queue);
+                }
+                auto subscription = clientSubscriptions->second.find(envelope.queue);
+                if (subscription == clientSubscriptions->second.end()) {
+                    throw std::runtime_error("Клиент не подписан на очередь: " + envelope.queue);
+                }
+                Subscription& state = subscription->second;
+                // TODO убрать
+                if (state.qos != ConsumerQos::NoAck) {
+                    throw std::runtime_error("!!! получение пока поддерживается только для no_ack");
+                }
+
+                FifoMemoryQueue& queue = queues.get(envelope.queue);
+                // чтение сообщения по позиции через FifoMemoryQueue::at() 
+                std::optional<Message> message = queue.at(state.nextMessage);
+                reply.queue = envelope.queue;
+                if (message) {
+                    reply.type = MsgType::Deliver;
+                    reply.msgId = message->id;
+                    reply.producerId = message->producerId;
+                    reply.payload = message->payload;
+                    // Сдвигаем позицию после успешной передачи ответа сокету.
+                    cursorToAdvance = &state.nextMessage;
+                } else {
+                    reply.type = MsgType::NoMessage;
+                }
             } else if (envelope.type == MsgType::Unsubscribe) {
                 /* пример сообщения отписки от очереди:
                 {"type": "unsubscribe", "queue": "HighPriorityQueue"}
@@ -146,6 +183,37 @@ int main(int argc, char* argv[]) {
 
                 reply.queue = envelope.queue;
                 reply.payload = "Подписка отменена";
+            } else if (envelope.type == MsgType::Produce) {
+                /* пример сообщения о новом сообщении от производителя брокеру:
+                {"type":"produce","queue":"MemoryFifoQueue","producer_id":"producer-1","payload":"привет"}
+                */
+                const auto producer = producers.find(client);
+                if (producer == producers.end()) {
+                    throw std::runtime_error("Сначала необходимо объявить производителя");
+                }
+
+                // для qos без подтверждения не посылаю ответ на produce, даже при ошибке
+                sendReply = producer->second != ProducerQos::None;
+                if (producer->second == ProducerQos::ConsumerAck) {
+                    throw std::runtime_error("QoS consumer_ack пока не поддерживается для produce");
+                }
+                if (envelope.queue.empty() || envelope.producerId.empty()) {
+                    throw std::runtime_error("Для produce требуются queue и producer_id");
+                }
+
+                // найти очередь
+                FifoMemoryQueue& queue = queues.get(envelope.queue);
+
+                Message message{
+                    std::to_string(nextMessageId++), 
+                    envelope.producerId, 
+                    envelope.payload
+                };
+                reply.msgId = message.id;
+                reply.queue = envelope.queue;
+                queue.push(std::move(message));
+                Logger::log("Сообщение #" + reply.msgId + " добавлено в очередь " + envelope.queue);
+                reply.payload = "Сообщение добавлено в очередь";
             } else {
                 throw std::runtime_error("Тип сообщения пока не поддерживается: "
                     + Envelope::typeToString(envelope.type));
@@ -157,9 +225,24 @@ int main(int argc, char* argv[]) {
             reply.payload = error.what();
         }
 
+        if (!sendReply) {
+            continue;
+        }
+
         // ответ ROUTERа клиенту по его identity в 2 фреймах
         std::string response = reply.toJson();
-        router.send(zmq::buffer(identity.data(), identity.size()), zmq::send_flags::sndmore);
-        router.send(zmq::buffer(response), zmq::send_flags::none);
+        const auto identitySent = router.send(zmq::buffer(identity.data(), identity.size()), zmq::send_flags::sndmore);
+        if (!identitySent) {
+            Logger::log("Не удалось отправить адрес ответа клиенту");
+            continue;
+        }
+        const auto responseSent = router.send(zmq::buffer(response), zmq::send_flags::none);
+        if (!responseSent) {
+            Logger::log("Не удалось отправить ответ клиенту");
+            continue;
+        }
+        if (cursorToAdvance) {
+            ++*cursorToAdvance;
+        }
     }
 }

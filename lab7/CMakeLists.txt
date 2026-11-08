@@ -43,6 +43,19 @@ target_link_libraries(lab7_protocol PUBLIC
   lab7_common
 )
 
+# модель хранения сообщений в памяти у брокера
+add_library(lab7_broker_core STATIC
+  src/broker/FifoMemoryQueue.cpp
+  src/broker/QueueManager.cpp
+)
+target_include_directories(lab7_broker_core PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+target_link_libraries(lab7_broker_core PUBLIC
+  lab7_common
+  Threads::Threads
+)
+
 # клиентская библиотека
 add_library(lab7_client STATIC
   src/client/BrokerClient.cpp
@@ -55,11 +68,12 @@ target_link_libraries(lab7_client PUBLIC
 )
 
 # для проверки связи с брокером
-add_executable(test_client src/test_client.cpp)
-target_link_libraries(test_client PRIVATE lab7_client lab7_protocol)
+# add_executable(test_client src/test_client.cpp)
+# target_link_libraries(test_client PRIVATE lab7_client lab7_protocol)
 
 add_executable(broker src/broker_main.cpp)
 target_link_libraries(broker PRIVATE
+  lab7_broker_core
   lab7_protocol
   PkgConfig::ZMQ
   Threads::Threads

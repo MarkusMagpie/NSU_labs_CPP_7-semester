@@ -3,6 +3,10 @@ broker:
   data_dir: "data"
 
 queues:
+  - name: "MemoryFifoQueue"
+    durability: "memory"
+    order: "fifo"
+
   - name: "HighPriorityQueue"
     durability: "disk"
     order: "fifo"

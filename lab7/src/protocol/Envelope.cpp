@@ -12,7 +12,9 @@ constexpr const char* kTypeNames[] = {
     "deliver",
     "notify",
     "ok",
-    "error"
+    "error",
+    "receive",
+    "no_message"
 };
 
 constexpr int kTypeCount = static_cast<int>(sizeof(kTypeNames) / sizeof(kTypeNames[0]));
