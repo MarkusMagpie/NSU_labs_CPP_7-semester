@@ -7,6 +7,10 @@ queues:
     durability: "memory"
     order: "fifo"
 
+  - name: "MemoryUnorderedQueue"
+    durability: "memory"
+    order: "unordered"
+
   - name: "HighPriorityQueue"
     durability: "disk"
     order: "fifo"

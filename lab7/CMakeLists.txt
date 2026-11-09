@@ -45,7 +45,7 @@ target_link_libraries(lab7_protocol PUBLIC
 
 # модель хранения сообщений в памяти у брокера
 add_library(lab7_broker_core STATIC
-  src/broker/FifoMemoryQueue.cpp
+  src/broker/MemoryQueue.cpp
   src/broker/QueueManager.cpp
 )
 target_include_directories(lab7_broker_core PUBLIC
@@ -67,9 +67,13 @@ target_link_libraries(lab7_client PUBLIC
   PkgConfig::ZMQ
 )
 
-# для проверки связи с брокером
+# проверка связи с брокером
 # add_executable(test_client src/test_client.cpp)
 # target_link_libraries(test_client PRIVATE lab7_client lab7_protocol)
+
+# проверка сценария 1 производитель и 2 потребителя с получением ими сообщений 
+# add_executable(m2_scenario src/m2_scenario.cpp)
+# target_link_libraries(m2_scenario PRIVATE lab7_client lab7_protocol)
 
 add_executable(broker src/broker_main.cpp)
 target_link_libraries(broker PRIVATE

@@ -10,19 +10,21 @@ QueueManager::QueueManager(const std::vector<QueueConfig>& configs) {
             throw std::runtime_error("Пустое или повторное имя очереди: " + config.name);
         }
 
-        if (config.durability != "memory" || config.order != "fifo" || config.messageTtl) {
-            unsupported_.emplace(config.name, "поддерживаются только memory + fifo без TTL");
-            Logger::log("Очередь " + config.name + " пока недоступна: поддерживаются только memory + fifo без TTL");
+        if (config.durability != "memory" || (config.order != "fifo" && config.order != "unordered") || config.messageTtl) {
+            unsupported_.emplace(config.name, "поддерживаются только memory + fifo/unordered без TTL");
+            Logger::log("Очередь " + config.name + " пока недоступна: поддерживаются только memory + fifo/unordered без TTL");
             continue;
         }
 
         // 2 создать объект очереди и положить в мапу
-        queues_.emplace(config.name, std::make_unique<FifoMemoryQueue>(config.name));
-        Logger::log("Создана очередь в памяти: " + config.name);
+        QueueOrder order = config.order == "fifo" ? QueueOrder::Fifo : QueueOrder::Unordered;
+        
+        queues_.emplace(config.name, std::make_unique<MemoryQueue>(config.name, order));
+        Logger::log("Создана очередь в памяти: " + config.name + ", порядок: " + config.order);
     }
 }
 
-FifoMemoryQueue& QueueManager::get(const std::string& name) {
+MemoryQueue& QueueManager::get(const std::string& name) {
     auto queue = queues_.find(name);
     if (queue != queues_.end()) {
         return *queue->second;

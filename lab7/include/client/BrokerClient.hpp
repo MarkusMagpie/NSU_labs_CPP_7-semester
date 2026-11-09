@@ -7,7 +7,7 @@
 // подключение одного клиента к router сокету брокера
 class BrokerClient {
 public:
-    explicit BrokerClient(const std::string& address);
+    BrokerClient(const std::string& address);
 
     // отправить брокеру одну часть сообщения
     void send(const std::string& message);

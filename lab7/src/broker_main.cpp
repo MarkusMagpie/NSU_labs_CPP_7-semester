@@ -148,8 +148,8 @@ int main(int argc, char* argv[]) {
                     throw std::runtime_error("!!! получение пока поддерживается только для no_ack");
                 }
 
-                FifoMemoryQueue& queue = queues.get(envelope.queue);
-                // чтение сообщения по позиции через FifoMemoryQueue::at() 
+                MemoryQueue& queue = queues.get(envelope.queue);
+                // чтение сообщения по позиции через MemoryQueue::at() 
                 std::optional<Message> message = queue.at(state.nextMessage);
                 reply.queue = envelope.queue;
                 if (message) {
@@ -201,8 +201,8 @@ int main(int argc, char* argv[]) {
                     throw std::runtime_error("Для produce требуются queue и producer_id");
                 }
 
-                // найти очередь
-                FifoMemoryQueue& queue = queues.get(envelope.queue);
+                // найти очередь в брокере по ее названию в письме
+                MemoryQueue& queue = queues.get(envelope.queue);
 
                 Message message{
                     std::to_string(nextMessageId++), 
