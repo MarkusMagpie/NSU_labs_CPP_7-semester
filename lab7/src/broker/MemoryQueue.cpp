@@ -50,8 +50,14 @@ std::optional<SequencedMessage> MemoryQueue::findNextMessageAfter(std::uint64_t 
 }
 
 // (для потребителя с WithAck QoS) выбирает сообщение из очереди и закрепляет его за указанным потребителем по clientId
-std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string& clientId) {
+std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string& clientId, std::chrono::milliseconds ackTimeout) {
     std::lock_guard<std::mutex> lock(mutex_);
+
+    if (ackTimeout <= std::chrono::milliseconds::zero()) {
+        throw std::invalid_argument("Таймаут подтверждения должен быть положительным");
+    }
+    // освобождение выдач сообщений с истекшим дедлайном перед новой выдачей
+    releaseExpiredDeliveriesLocked(std::chrono::steady_clock::now());
 
     if (messages_.empty()) {
         return std::nullopt;
@@ -84,7 +90,8 @@ std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string&
     };
     it->active = ActiveDelivery{
         clientId, 
-        delivery.deliveryAttemptId
+        delivery.deliveryAttemptId,
+        std::chrono::steady_clock::now() + ackTimeout // дедлайн = текущий момент + длительность ожидания подтверждения получения сообщения потребителем
     };
 
     // 3 - теперь сообщение закреплено за потребителем и выдано ему  
@@ -117,9 +124,36 @@ bool MemoryQueue::confirmDeliveryAndRemoveMessage(const std::string& clientId,
                 && entry.active->deliveryAttemptId == deliveryAttemptId;
         });
     if (it == messages_.end()) return false;
-    messages_.erase(it); // письмо удалено из очереди
+
+    // если периодическая проверка еще не выполнялась после дедлайна
+    if (std::chrono::steady_clock::now() >= it->active->deadline) {
+        it->active.reset();
+        return false;
+    }
+
+    messages_.erase(it); // удаление выбранного письма из очереди
 
     return true;
+}
+
+std::size_t MemoryQueue::releaseExpiredDeliveriesLocked(std::chrono::steady_clock::time_point now) {
+    std::size_t released = 0;
+    for (Entry& entry : messages_) {
+        if (entry.active 
+            // срок ожидания истек?
+            && now >= entry.active->deadline) {
+            entry.active.reset(); // удалил пометку выдачи; НЕ само письмо
+            ++released;
+        }
+    }
+
+    return released;
+}
+
+std::size_t MemoryQueue::releaseExpiredDeliveries() {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    return releaseExpiredDeliveriesLocked(std::chrono::steady_clock::now());
 }
 
 // удаление пометок выдачи письма при отписке клиента от очереди 

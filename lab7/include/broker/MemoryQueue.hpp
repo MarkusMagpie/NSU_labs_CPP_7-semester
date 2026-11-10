@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <deque>
 #include <mutex>
 #include <optional>
@@ -24,6 +25,7 @@ struct SequencedMessage {
 struct ActiveDelivery {
     std::string clientId; // ROUTER identity потребителя = кому брокер выдал письмо
     std::string deliveryAttemptId; // номер попытки выдачи
+    std::chrono::steady_clock::time_point deadline; // до какого момента брокер ожидает ack от потребителя
 };
 
 // результат reserveNextMessageForAck() для ответа брокеру
@@ -50,6 +52,10 @@ private:
 
     std::uint64_t nextSequence_ = 1; // номер добавляемого сообщения
     std::uint64_t nextDeliveryAttemptId_ = 1; // номер следующей попытки выдачи в очереди
+
+    // !!! вызывать только под mutex_
+    // возвращает число освобожденных выдач
+    std::size_t releaseExpiredDeliveriesLocked(std::chrono::steady_clock::time_point now);
 public:
     MemoryQueue(std::string name, QueueOrder order);
 
@@ -62,7 +68,7 @@ public:
     std::optional<SequencedMessage> findNextMessageAfter(std::uint64_t lastSequence) const;
 
     // выбрать и закрепить сообщение за одним потребителем WithAck
-    std::optional<Delivery> reserveNextMessageForAck(const std::string& clientId);
+    std::optional<Delivery> reserveNextMessageForAck(const std::string& clientId, std::chrono::milliseconds ackTimeout);
     // удалить сообщение только при совпадении клиента и активной попытки
     bool confirmDeliveryAndRemoveMessage(const std::string& clientId, const std::string& messageId,
         const std::string& deliveryAttemptId);
@@ -71,6 +77,9 @@ public:
     // отменить конкретную выдачу если ответ не удалось отправить сокету потребителя
     void releaseActiveDelivery(const std::string& clientId, const std::string& messageId,
         const std::string& deliveryAttemptId);
+
+    // освободить выдачи для которых истек срок ожидания подтверждения
+    std::size_t releaseExpiredDeliveries();
 
     std::size_t size() const;
 };

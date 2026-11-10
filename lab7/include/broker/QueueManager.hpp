@@ -17,4 +17,7 @@ public:
     QueueManager(const std::vector<QueueConfig>& configs);
 
     MemoryQueue& get(const std::string& name);
+
+    // проверить таймауты активных выдач сообщений во всех очередях
+    void releaseExpiredDeliveries();
 };

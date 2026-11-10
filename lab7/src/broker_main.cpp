@@ -1,4 +1,5 @@
 #include <exception>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -44,7 +45,7 @@ int main(int argc, char* argv[]) {
     // настройки подписки очереди
     struct Subscription {
         ConsumerQos qos; // QoS потребителя
-        std::optional<int> ackTimeoutMs;
+        std::optional<int> ackTimeoutMs; // таймаут подтверждения получения сообщения 
         std::uint64_t lastSequence = 0; // номер последнего выданного сообщения
     };
 
@@ -55,6 +56,20 @@ int main(int argc, char* argv[]) {
 
     // 3 - ROUTER получает идентификатор клиента + 1 фрейм с JSON
     while (true) {
+        // 3.1 - обхожу все доступные очереди и каждой говорю "проверь свои активные выдачи сообщений и освободи те у которых истек срок"
+        queues.releaseExpiredDeliveries();
+
+        // объект для ожидания событи: слежка за сокетом router и событием ZMQ_POLLIN - возможность читать входящие данные
+        zmq::pollitem_t items[] = {
+            {router.handle(), 0, ZMQ_POLLIN, 0}
+        };
+        // брокер ждет пока на сокете появятся входящие данные || пока закончится период ожидания
+        zmq::poll(items, 1, std::chrono::milliseconds(50));
+        // проверка есть ли входящее сообщение (revents содержит события которые произошли)
+        if (!(items[0].revents & ZMQ_POLLIN)) {
+            continue;
+        }
+
         zmq::message_t identity;
         if (!router.recv(identity, zmq::recv_flags::none)) {
             continue;
@@ -172,7 +187,7 @@ int main(int argc, char* argv[]) {
                     }
                 } else if (state.qos == ConsumerQos::WithAck) {
                     // найти следующее сообщение и зарезервировать его для выдачи с подтверждением указанному потребителю (по его client_id)
-                    std::optional<Delivery> delivery = queue.reserveNextMessageForAck(client_id);
+                    std::optional<Delivery> delivery = queue.reserveNextMessageForAck(client_id, std::chrono::milliseconds(*state.ackTimeoutMs));
                     if (delivery) {
                         /*
                         пример ответа: 
@@ -215,7 +230,9 @@ int main(int argc, char* argv[]) {
                 пример: "клиент 1 подтверждает msg_id=10, attempt=5" -> из очереди в брокере удаляется соответсвующее письмо 
                 */
                 if (!queue.confirmDeliveryAndRemoveMessage(client_id, envelope.msgId, envelope.deliveryAttemptId)) {
-                    throw std::runtime_error("Активная выдача для ack не найдена");
+                    // просроченное, повторное или чужое подтверждение ничего не меняет
+                    Logger::log("Подтверждение проигнорировано: выдача сообщения не найдена или истекло время подтверждения");
+                    continue;
                 }
                 reply.queue = envelope.queue;
                 reply.msgId = envelope.msgId;

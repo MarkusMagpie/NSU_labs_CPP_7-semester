@@ -20,6 +20,7 @@ QueueManager::QueueManager(const std::vector<QueueConfig>& configs) {
         QueueOrder order = config.order == "fifo" ? QueueOrder::Fifo : QueueOrder::Unordered;
         
         queues_.emplace(config.name, std::make_unique<MemoryQueue>(config.name, order));
+        
         Logger::log("Создана очередь в памяти: " + config.name + ", порядок: " + config.order);
     }
 }
@@ -36,4 +37,14 @@ MemoryQueue& QueueManager::get(const std::string& name) {
     }
     
     throw std::runtime_error("Неизвестная очередь: " + name);
+}
+
+void QueueManager::releaseExpiredDeliveries() {
+    // обхожу все доступные очереди и каждой говорю "проверь свои активные выдачи сообщений и освободи те у которых истек срок"
+    for (const auto& [name, queue] : queues_) {
+        std::size_t count = queue->releaseExpiredDeliveries();
+        if (count > 0) {
+            Logger::log("Очередь " + name + ": по таймауту освобождено выдач: " + std::to_string(count));
+        }
+    }
 }
