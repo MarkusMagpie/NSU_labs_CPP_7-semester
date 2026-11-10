@@ -56,7 +56,9 @@ int main(int argc, char* argv[]) {
 
     // 3 - ROUTER получает идентификатор клиента + 1 фрейм с JSON
     while (true) {
-        // 3.1 - обхожу все доступные очереди и каждой говорю "проверь свои активные выдачи сообщений и освободи те у которых истек срок"
+        // удалить собщения у которых истек ттл
+        queues.removeExpiredMessages();
+        // у оставшихся сообщений освободить истекшие попытки подтверждения выдачи сообщений от WithAck потребителей
         queues.releaseExpiredDeliveries();
 
         // объект для ожидания событи: слежка за сокетом router и событием ZMQ_POLLIN - возможность читать входящие данные
@@ -104,6 +106,7 @@ int main(int argc, char* argv[]) {
         
         /* указатель на очередь в которой брокер в текущей итерации обработал запрос receive от потребителя WithAck */
         MemoryQueue* claimedQueue = nullptr;
+        MemoryQueue* deliveryQueue = nullptr;
         const std::string client_id = identity.to_string();
         try {
             Envelope envelope = Envelope::fromJson(body);
@@ -175,6 +178,7 @@ int main(int argc, char* argv[]) {
                     // брокер ищет СЛЕДУЮЩЕЕ письмо очереди (при этом не удаляет)
                     std::optional<SequencedMessage> message = queue.findNextMessageAfter(state.lastSequence);
                     if (message) {
+                        deliveryQueue = &queue;
                         reply.type = MsgType::Deliver;
                         reply.msgId = message->message.id;
                         reply.producerId = message->message.producerId;
@@ -202,6 +206,7 @@ int main(int argc, char* argv[]) {
                         */
                         
                         claimedQueue = &queue;
+                        deliveryQueue = &queue;
 
                         reply.type = MsgType::Deliver;
                         reply.msgId = delivery->message.id;
@@ -302,6 +307,8 @@ int main(int argc, char* argv[]) {
                 claimedQueue->releaseActiveDelivery(client_id, reply.msgId, reply.deliveryAttemptId);
                 claimedQueue = nullptr;
             }
+            deliveryQueue = nullptr;
+            cursorToAdvance = nullptr;
             Logger::log("Ошибка обработки конверта: " + std::string(error.what()));
             
             reply.type = MsgType::Error;
@@ -310,6 +317,17 @@ int main(int argc, char* argv[]) {
 
         if (!sendReply) {
             continue;
+        }
+
+        // при подготовке ответа ttl мог закончиться после выбора сообщения
+        if (deliveryQueue && !deliveryQueue->isMessageAvailable(reply.msgId)) {
+            std::string queueName = reply.queue;
+            reply = Envelope{};
+            reply.type = MsgType::NoMessage;
+            reply.queue = queueName;
+
+            cursorToAdvance = nullptr;
+            claimedQueue = nullptr;
         }
 
         // ответ ROUTERа клиенту по его identity в 2 фреймах

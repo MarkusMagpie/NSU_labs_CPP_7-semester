@@ -4,9 +4,16 @@
 #include <utility>
 
 #include <broker/MemoryQueue.hpp>
+#include <common/Logger.hpp>
 
-MemoryQueue::MemoryQueue(std::string name, QueueOrder order)
-    : name_(std::move(name)), order_(order) {}
+MemoryQueue::MemoryQueue(std::string name, QueueOrder order,
+    std::optional<std::chrono::seconds> messageTtl)
+    : name_(std::move(name)), order_(order), messageTtl_(messageTtl) 
+{
+    if (messageTtl_ && *messageTtl_ <= std::chrono::seconds::zero()) {
+        throw std::invalid_argument("TTL очереди должен быть положительным");
+    }
+}
 
 const std::string& MemoryQueue::name() const {
     return name_;
@@ -23,10 +30,18 @@ void MemoryQueue::push(Message message) {
     if (nextSequence_ == std::numeric_limits<std::uint64_t>::max()) {
         throw std::overflow_error("Исчерпаны порядковые номера очереди: " + name_);
     }
+
+    // момент когда TTL истечет = когда сообщение перестанет жить в очереди
+    std::optional<std::chrono::steady_clock::time_point> expiresAt;
+    if (messageTtl_) {
+        expiresAt = std::chrono::steady_clock::now() + *messageTtl_;
+    }
+
     messages_.push_back(
         Entry{
             SequencedMessage{nextSequence_, std::move(message)}, 
-            std::nullopt // сообщение еще никому не выдано -> "доступно для выдачи потребителю"
+            std::nullopt, // сообщение еще никому не выдано
+            expiresAt
         }
     );
 
@@ -34,8 +49,10 @@ void MemoryQueue::push(Message message) {
 }
 
 // (для потребителя с NoAck QoS) ищет первое письмо с номером больше lastSequence
-std::optional<SequencedMessage> MemoryQueue::findNextMessageAfter(std::uint64_t lastSequence) const {
+std::optional<SequencedMessage> MemoryQueue::findNextMessageAfter(std::uint64_t lastSequence) {
     std::lock_guard<std::mutex> lock(mutex_);
+
+    removeExpiredMessagesLocked(std::chrono::steady_clock::now());
 
     auto it = std::upper_bound(messages_.begin(), messages_.end(), lastSequence,
         [](std::uint64_t sequence, const Entry& entry) {
@@ -56,8 +73,10 @@ std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string&
     if (ackTimeout <= std::chrono::milliseconds::zero()) {
         throw std::invalid_argument("Таймаут подтверждения должен быть положительным");
     }
-    // освобождение выдач сообщений с истекшим дедлайном перед новой выдачей
-    releaseExpiredDeliveriesLocked(std::chrono::steady_clock::now());
+    // удаляю просроченные письма, освобождаю просроченные выдачи потребителям
+    const auto now = std::chrono::steady_clock::now();
+    removeExpiredMessagesLocked(now);
+    releaseExpiredDeliveriesLocked(now);
 
     if (messages_.empty()) {
         return std::nullopt;
@@ -107,6 +126,13 @@ bool MemoryQueue::confirmDeliveryAndRemoveMessage(const std::string& clientId,
 {
     std::lock_guard<std::mutex> lock(mutex_);
 
+    /* пример:
+    1 A выдано потребителю с WithAck
+    2 у A истек ттл -> должен быть удален из очереди
+    3 ack пришел на A
+    */
+    removeExpiredMessagesLocked(std::chrono::steady_clock::now());
+
     auto it = std::find_if(
         messages_.begin(), 
         messages_.end(), 
@@ -154,6 +180,43 @@ std::size_t MemoryQueue::releaseExpiredDeliveries() {
     std::lock_guard<std::mutex> lock(mutex_);
 
     return releaseExpiredDeliveriesLocked(std::chrono::steady_clock::now());
+}
+
+std::size_t MemoryQueue::removeExpiredMessagesLocked(std::chrono::steady_clock::time_point now) {
+    const auto oldSize = messages_.size();
+
+    // удаление из messages_ всех записей для которых условие вернуло true
+    auto newEnd = std::remove_if(
+        messages_.begin(), 
+        messages_.end(),
+        [now](const Entry& entry) { 
+            return entry.expiresAt && now >= *entry.expiresAt; 
+        });
+    messages_.erase(newEnd, messages_.end()
+    );
+
+    const std::size_t removed = oldSize - messages_.size();
+    if (removed > 0) {
+        Logger::log("Очередь " + name_ + ": по TTL удалено сообщений: " + std::to_string(removed));
+    }
+    
+    return removed;
+}
+
+std::size_t MemoryQueue::removeExpiredMessages() {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    return removeExpiredMessagesLocked(std::chrono::steady_clock::now());
+}
+
+bool MemoryQueue::isMessageAvailable(const std::string& messageId) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    removeExpiredMessagesLocked(std::chrono::steady_clock::now());
+
+    return std::any_of(messages_.begin(), messages_.end(), [&](const Entry& entry) {
+        return entry.item.message.id == messageId;
+    });
 }
 
 // удаление пометок выдачи письма при отписке клиента от очереди 

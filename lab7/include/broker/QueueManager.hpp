@@ -20,4 +20,7 @@ public:
 
     // проверить таймауты активных выдач сообщений во всех очередях
     void releaseExpiredDeliveries();
+
+    // удалить сообщения с истекшим TTL во всех очередях
+    void removeExpiredMessages();
 };
