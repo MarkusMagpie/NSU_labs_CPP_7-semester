@@ -43,14 +43,14 @@ int main(int argc, char* argv[]) {
 
     // настройки подписки очереди
     struct Subscription {
-        ConsumerQos qos; // уровень QoS потребителя
+        ConsumerQos qos; // QoS потребителя
         std::optional<int> ackTimeoutMs;
-        std::size_t nextMessage = 0; // позиция следующего сообщения для NoAck
+        std::uint64_t lastSequence = 0; // номер последнего выданного сообщения
     };
 
-    // identity клиента -> QoS производителя (пополняется declare_producer)
+    // id клиента -> QoS производителя (пополняется declare_producer)
     std::map<std::string, ProducerQos> producers;
-    // identity клиента -> имя очереди -> настройки ее подписки
+    // id клиента -> имя очереди -> настройки подписки очереди 
     std::map<std::string, std::map<std::string, Subscription>> subscriptions;
 
     // 3 - ROUTER получает идентификатор клиента + 1 фрейм с JSON
@@ -84,20 +84,24 @@ int main(int argc, char* argv[]) {
         // разбор json фрейма + составление ответа ROUTERа клиенту
         Envelope reply;
         bool sendReply = true;
-        std::size_t* cursorToAdvance = nullptr;
+        std::uint64_t* cursorToAdvance = nullptr;
+        std::uint64_t deliveredSequence = 0;
+        
+        /* указатель на очередь в которой брокер в текущей итерации обработал запрос receive от потребителя WithAck */
+        MemoryQueue* claimedQueue = nullptr;
+        const std::string client_id = identity.to_string();
         try {
             Envelope envelope = Envelope::fromJson(body);
             Logger::log("Получен конверт: type=" + Envelope::typeToString(envelope.type) 
                 + ", queue=" + envelope.queue 
                 + ", payload=" + envelope.payload.dump());
             reply.type = MsgType::Ok;
-            const std::string client = identity.to_string();
             if (envelope.type == MsgType::DeclareProducer) {
                 if (!envelope.producerQos) {
                     throw std::runtime_error("Для declare_producer требуется producer_qos");
                 }
 
-                producers.insert_or_assign(client, *envelope.producerQos);
+                producers.insert_or_assign(client_id, *envelope.producerQos);
                 reply.payload = "Производитель зарегистрирован";
             } else if (envelope.type == MsgType::Subscribe) {
                 /* пример сообщения подписки на очередь: 
@@ -115,8 +119,12 @@ int main(int argc, char* argv[]) {
                     && (!envelope.ackTimeoutMs || *envelope.ackTimeoutMs <= 0)) {
                     throw std::runtime_error("Для with_ack QoS требуется положительный ack_timeout_ms");
                 }
+
+                // повторная подписка отменяет старые выдачи этого клиента в очереди
+                queues.get(envelope.queue).releaseAllDeliveriesForClient(client_id);
+                
                 // сохранение подписки
-                subscriptions[client].insert_or_assign(envelope.queue,
+                subscriptions[client_id].insert_or_assign(envelope.queue,
                     Subscription{
                         *envelope.consumerQos, 
                         envelope.ackTimeoutMs
@@ -126,15 +134,15 @@ int main(int argc, char* argv[]) {
                 reply.queue = envelope.queue;
                 reply.payload = "Подписка зарегистрирована";
             } else if (envelope.type == MsgType::Receive) {
-                /* пример сообщения клиента брокеру для получения письма
+                /* пример сообщения потребителя брокеру для получения письма
                 {"type": "receive", "queue": "MemoryFifoQueue"}
                 */
                 if (envelope.queue.empty()) {
                     throw std::runtime_error("Для receive требуется queue");
                 }
 
-                // проверка имени очереди и настройки подписки у клиента
-                auto clientSubscriptions = subscriptions.find(client);
+                // проверка имени очереди и подписки у клиента
+                auto clientSubscriptions = subscriptions.find(client_id);
                 if (clientSubscriptions == subscriptions.end()) {
                     throw std::runtime_error("Клиент не подписан на очередь: " + envelope.queue);
                 }
@@ -142,26 +150,78 @@ int main(int argc, char* argv[]) {
                 if (subscription == clientSubscriptions->second.end()) {
                     throw std::runtime_error("Клиент не подписан на очередь: " + envelope.queue);
                 }
+
                 Subscription& state = subscription->second;
-                // TODO убрать
-                if (state.qos != ConsumerQos::NoAck) {
-                    throw std::runtime_error("!!! получение пока поддерживается только для no_ack");
+                MemoryQueue& queue = queues.get(envelope.queue);
+                reply.queue = envelope.queue;
+
+                // получение письма варьируется от QoS потребителя
+                if (state.qos == ConsumerQos::NoAck) {
+                    // брокер ищет СЛЕДУЮЩЕЕ письмо очереди (при этом не удаляет)
+                    std::optional<SequencedMessage> message = queue.findNextMessageAfter(state.lastSequence);
+                    if (message) {
+                        reply.type = MsgType::Deliver;
+                        reply.msgId = message->message.id;
+                        reply.producerId = message->message.producerId;
+                        reply.payload = message->message.payload;
+
+                        cursorToAdvance = &state.lastSequence;
+                        deliveredSequence = message->sequence;
+                    } else {
+                        reply.type = MsgType::NoMessage;
+                    }
+                } else if (state.qos == ConsumerQos::WithAck) {
+                    // найти следующее сообщение и зарезервировать его для выдачи с подтверждением указанному потребителю (по его client_id)
+                    std::optional<Delivery> delivery = queue.reserveNextMessageForAck(client_id);
+                    if (delivery) {
+                        /*
+                        пример ответа: 
+                        {
+                        "type": "deliver", 
+                        "queue": "MemoryFifoQueue", 
+                        "msg_id": "10", 
+                        "delivery_attempt_id": "5", 
+                        "producer_id": "producer-1", 
+                        "payload": "ляляля"
+                        }
+                        */
+                        
+                        claimedQueue = &queue;
+
+                        reply.type = MsgType::Deliver;
+                        reply.msgId = delivery->message.id;
+                        reply.deliveryAttemptId = delivery->deliveryAttemptId;
+                        reply.producerId = delivery->message.producerId;
+                        reply.payload = delivery->message.payload;
+                    } else {
+                        reply.type = MsgType::NoMessage;
+                    }
+                } else {
+                    throw std::runtime_error("Получение с recovery пока не поддерживается");
+                }
+            } else if (envelope.type == MsgType::Ack) {
+                if (envelope.queue.empty() || envelope.msgId.empty() || envelope.deliveryAttemptId.empty()) {
+                    throw std::runtime_error("Для ack требуются queue, msg_id и delivery_attempt_id");
                 }
 
                 MemoryQueue& queue = queues.get(envelope.queue);
-                // чтение сообщения по позиции через MemoryQueue::at() 
-                std::optional<Message> message = queue.at(state.nextMessage);
-                reply.queue = envelope.queue;
-                if (message) {
-                    reply.type = MsgType::Deliver;
-                    reply.msgId = message->id;
-                    reply.producerId = message->producerId;
-                    reply.payload = message->payload;
-                    // Сдвигаем позицию после успешной передачи ответа сокету.
-                    cursorToAdvance = &state.nextMessage;
-                } else {
-                    reply.type = MsgType::NoMessage;
+                
+                /*
+                в очереди ищется письмо в котором: 
+                    id письма совпал
+                    есть активная выдача
+                    identity клиента совпал
+                    id попытки выдачи совпал
+                пример: "клиент 1 подтверждает msg_id=10, attempt=5" -> из очереди в брокере удаляется соответсвующее письмо 
+                */
+                if (!queue.confirmDeliveryAndRemoveMessage(client_id, envelope.msgId, envelope.deliveryAttemptId)) {
+                    throw std::runtime_error("Активная выдача для ack не найдена");
                 }
+                reply.queue = envelope.queue;
+                reply.msgId = envelope.msgId;
+                reply.payload = "обработка подтверждена";
+
+                Logger::log("Сообщение #" + envelope.msgId + " подтверждено и удалено из очереди " + envelope.queue);
             } else if (envelope.type == MsgType::Unsubscribe) {
                 /* пример сообщения отписки от очереди:
                 {"type": "unsubscribe", "queue": "HighPriorityQueue"}
@@ -171,7 +231,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 // удаляю только подписку отправившего письмо клиента на указанную в письме очередь
-                auto clientSubscriptions = subscriptions.find(client);
+                auto clientSubscriptions = subscriptions.find(client_id);
                 if (clientSubscriptions == subscriptions.end()
                     || clientSubscriptions->second.erase(envelope.queue) == 0) {
                     throw std::runtime_error("Подписка на очередь не найдена: " + envelope.queue);
@@ -181,13 +241,15 @@ int main(int argc, char* argv[]) {
                     subscriptions.erase(clientSubscriptions);
                 }
 
+                queues.get(envelope.queue).releaseAllDeliveriesForClient(client_id);
+
                 reply.queue = envelope.queue;
                 reply.payload = "Подписка отменена";
             } else if (envelope.type == MsgType::Produce) {
                 /* пример сообщения о новом сообщении от производителя брокеру:
                 {"type":"produce","queue":"MemoryFifoQueue","producer_id":"producer-1","payload":"привет"}
                 */
-                const auto producer = producers.find(client);
+                const auto producer = producers.find(client_id);
                 if (producer == producers.end()) {
                     throw std::runtime_error("Сначала необходимо объявить производителя");
                 }
@@ -211,7 +273,7 @@ int main(int argc, char* argv[]) {
                 };
                 reply.msgId = message.id;
                 reply.queue = envelope.queue;
-                queue.push(std::move(message));
+                queue.push(std::move(message)); // запись письма в конец очереди
                 Logger::log("Сообщение #" + reply.msgId + " добавлено в очередь " + envelope.queue);
                 reply.payload = "Сообщение добавлено в очередь";
             } else {
@@ -219,6 +281,10 @@ int main(int argc, char* argv[]) {
                     + Envelope::typeToString(envelope.type));
             }
         } catch (const std::exception& error) {
+            if (claimedQueue) {
+                claimedQueue->releaseActiveDelivery(client_id, reply.msgId, reply.deliveryAttemptId);
+                claimedQueue = nullptr;
+            }
             Logger::log("Ошибка обработки конверта: " + std::string(error.what()));
             
             reply.type = MsgType::Error;
@@ -234,15 +300,17 @@ int main(int argc, char* argv[]) {
         const auto identitySent = router.send(zmq::buffer(identity.data(), identity.size()), zmq::send_flags::sndmore);
         if (!identitySent) {
             Logger::log("Не удалось отправить адрес ответа клиенту");
+            if (claimedQueue) claimedQueue->releaseActiveDelivery(client_id, reply.msgId, reply.deliveryAttemptId);
             continue;
         }
         const auto responseSent = router.send(zmq::buffer(response), zmq::send_flags::none);
         if (!responseSent) {
             Logger::log("Не удалось отправить ответ клиенту");
+            if (claimedQueue) claimedQueue->releaseActiveDelivery(client_id, reply.msgId, reply.deliveryAttemptId);
             continue;
         }
         if (cursorToAdvance) {
-            ++*cursorToAdvance;
+            *cursorToAdvance = deliveredSequence;
         }
     }
 }

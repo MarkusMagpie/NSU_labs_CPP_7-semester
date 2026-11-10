@@ -81,6 +81,7 @@ std::string Envelope::toJson() const {
     if (!clientId.empty()) j["client_id"] = clientId;
     if (!queue.empty()) j["queue"] = queue;
     if (!msgId.empty()) j["msg_id"] = msgId;
+    if (!deliveryAttemptId.empty()) j["delivery_attempt_id"] = deliveryAttemptId;
     if (!producerId.empty()) j["producer_id"] = producerId;
 
     j["producer_seq"] = producerSeq;
@@ -105,6 +106,7 @@ Envelope Envelope::fromJson(const std::string& text) {
     envelope.clientId = j.value("client_id", std::string{});
     envelope.queue = j.value("queue", std::string{});
     envelope.msgId = j.value("msg_id", std::string{});
+    envelope.deliveryAttemptId = j.value("delivery_attempt_id", std::string{});
     envelope.producerId = j.value("producer_id", std::string{});
     envelope.producerSeq = j.value("producer_seq", std::int64_t{0});
 
