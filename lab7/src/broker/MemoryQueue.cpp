@@ -26,6 +26,7 @@ QueueOrder MemoryQueue::order() const {
     return order_;
 }
 
+// -1: left < right; 0: равны; 1: left > right
 int MemoryQueue::compareIntegerSortValues(const nlohmann::json& left, const nlohmann::json& right) {
     if (!left.is_number_integer() || !right.is_number_integer()) {
         throw std::logic_error("Ключи сортировки должны быть целыми числами");
@@ -177,16 +178,21 @@ std::optional<SortedReadResult> MemoryQueue::findNextSortedMessage(const std::op
 }
 
 // (для потребителя с WithAck QoS) выбирает сообщение из очереди и закрепляет его за указанным потребителем по clientId
-std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string& clientId, std::chrono::milliseconds ackTimeout) {
+std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string& clientId, 
+    std::chrono::milliseconds ackTimeout,
+    const std::optional<SortedReadPosition>& lastSortedPosition) 
+{
     std::lock_guard<std::mutex> lock(mutex_);
-
-    // if (order_ == QueueOrder::Sorted) {
-    //     throw std::logic_error("Выдача sorted-очереди пока не реализована");
-    // }
 
     if (ackTimeout <= std::chrono::milliseconds::zero()) {
         throw std::invalid_argument("Таймаут подтверждения должен быть положительным");
     }
+    if (order_ == QueueOrder::Sorted 
+        && lastSortedPosition 
+        && !lastSortedPosition->sortValue.is_number_integer()) {
+        throw std::invalid_argument("Позиция сортированного чтения должна содержать целый ключ");
+    }
+
     // удаляю просроченные письма, освобождаю просроченные выдачи потребителям
     const auto now = std::chrono::steady_clock::now();
     removeExpiredMessagesLocked(now);
@@ -203,6 +209,27 @@ std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string&
         if (it->active) {
             return std::nullopt;
         }
+    } else if (order_ == QueueOrder::Sorted) {
+        // среди свободных писем выбор минимальной пары (key, sequence)
+        it = messages_.end();
+        for (auto candidate = messages_.begin(); candidate != messages_.end(); ++candidate) {
+            if (!candidate->sortValue) {
+                throw std::logic_error("У записи очереди с sorted order отсутствует ключ сортировки");
+            }
+
+            // пропуск уже ожидающих ack писем || key кандидата < key lastSortedPosition
+            if (candidate->active || 
+                (lastSortedPosition && compareIntegerSortValues(*candidate->sortValue, lastSortedPosition->sortValue) < 0)) {
+                continue;
+            }
+
+            // выбор подходящего письма - сравнение их key, затем в случае равенста sequence number в очереди
+            if (it == messages_.end() || 
+                isEntryBeforeBySortKey(*candidate, *it)) {
+                it = candidate;
+            }
+        }
+        if (it == messages_.end()) return std::nullopt;
     } else {
         // для unordered -> ищу первое письмо без активной выдачи (т.е. оно доступно для выдачи)
         it = std::find_if(messages_.begin(), messages_.end(),
@@ -219,15 +246,20 @@ std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string&
     // 2 - РЕЗЕРВИРОВАНИЕ = запись в active письма какому клиенту и в рамках какой попытки оно выдано 
     Delivery delivery{
         it->item.message, 
-        std::to_string(nextDeliveryAttemptId_)
+        std::to_string(nextDeliveryAttemptId_),
+        std::nullopt
     };
+    if (order_ == QueueOrder::Sorted) {
+        delivery.sortedPosition = SortedReadPosition{*it->sortValue, it->item.sequence};
+    }
     it->active = ActiveDelivery{
         clientId, 
         delivery.deliveryAttemptId,
+        // до какого момента брокер ожидает ack от потребителя
         std::chrono::steady_clock::now() + ackTimeout // дедлайн = текущий момент + длительность ожидания подтверждения получения сообщения потребителем
     };
 
-    // 3 - теперь сообщение закреплено за потребителем и выдано ему  
+    // 3 - теперь сообщение закреплено брокером за потребителем и выдано ему  
     ++nextDeliveryAttemptId_;
     
     return delivery;

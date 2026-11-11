@@ -231,7 +231,11 @@ int main(int argc, char* argv[]) {
                     }
                 } else if (state.qos == ConsumerQos::WithAck) {
                     // найти следующее сообщение и зарезервировать его для выдачи с подтверждением указанному потребителю (по его client_id)
-                    std::optional<Delivery> delivery = queue.reserveNextMessageForAck(client_id, std::chrono::milliseconds(*state.ackTimeoutMs));
+                    std::optional<Delivery> delivery = queue.reserveNextMessageForAck(
+                        client_id, 
+                        std::chrono::milliseconds(*state.ackTimeoutMs), // сколько ждать ack
+                        state.lastSortedPosition // какой (key, sequence) этот подписчик видел последним
+                    );
                     if (delivery) {
                         /*
                         пример ответа: 
@@ -253,6 +257,13 @@ int main(int argc, char* argv[]) {
                         reply.deliveryAttemptId = delivery->deliveryAttemptId;
                         reply.producerId = delivery->message.producerId;
                         reply.payload = delivery->message.payload;
+
+                        // очередь сообщила брокеру что выбрала и зарезервировала письмо с такой позицией
+                        if (delivery->sortedPosition) {
+                            // эту позицию конкретного подписчика нужно будет обновить после отправки ему письма 
+                            sortedCursorToAdvance = &state.lastSortedPosition;
+                            deliveredSortedPosition = std::move(delivery->sortedPosition);
+                        }
                     } else {
                         reply.type = MsgType::NoMessage;
                     }

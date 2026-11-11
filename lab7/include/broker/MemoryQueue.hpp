@@ -22,7 +22,7 @@ struct SequencedMessage {
     Message message;
 };
 
-// письмо которое потребитель получил последним в сортированном порядке
+// последнее письмо полученное потребителем в очереди с sorted order
 struct SortedReadPosition {
     nlohmann::json sortValue; // = key
     std::uint64_t sequence;
@@ -45,6 +45,7 @@ struct ActiveDelivery {
 struct Delivery {
     Message message;
     std::string deliveryAttemptId;
+    std::optional<SortedReadPosition> sortedPosition; // для очереди с sorted order: позиция письма переданного потребителю
 };
 
 class MemoryQueue {
@@ -56,7 +57,7 @@ private:
         // active заполнено -> письмо выдано и ожидает подтверждения потребителем с withack
         std::optional<ActiveDelivery> active; // информация о выдаче
         std::optional<std::chrono::steady_clock::time_point> expiresAt; // момент истечения TTL = сообщение перестанет жить в очереди
-        std::optional<nlohmann::json> sortValue; // целое значение sortKey, знаковое или беззнаковое
+        std::optional<nlohmann::json> sortValue; // целое знаковое или беззнаковое значение sortKey (key)
     };
     
     const std::string name_;
@@ -100,11 +101,13 @@ public:
     // найти минимальную пару (key, sequence) после позиции
     std::optional<SortedReadResult> findNextSortedMessage(const std::optional<SortedReadPosition>& lastPosition);
 
-    // выбрать и закрепить сообщение за одним потребителем WithAck
-    std::optional<Delivery> reserveNextMessageForAck(const std::string& clientId, std::chrono::milliseconds ackTimeout);
+    // выбрать и закрепить сообщение за одним потребителем с WithAck QoS
+    std::optional<Delivery> reserveNextMessageForAck(
+        const std::string& clientId, 
+        std::chrono::milliseconds ackTimeout,
+        const std::optional<SortedReadPosition>& lastSortedPosition = std::nullopt);
     // удалить сообщение только при совпадении клиента и активной попытки
-    bool confirmDeliveryAndRemoveMessage(const std::string& clientId, const std::string& messageId,
-        const std::string& deliveryAttemptId);
+    bool confirmDeliveryAndRemoveMessage(const std::string& clientId, const std::string& messageId, const std::string& deliveryAttemptId);
     // отменить выдачи при отписке или изменении подписки
     void releaseAllDeliveriesForClient(const std::string& clientId);
     // отменить конкретную выдачу если ответ не удалось отправить сокету потребителя
