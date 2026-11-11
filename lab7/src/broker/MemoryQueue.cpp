@@ -7,11 +7,14 @@
 #include <common/Logger.hpp>
 
 MemoryQueue::MemoryQueue(std::string name, QueueOrder order,
-    std::optional<std::chrono::seconds> messageTtl)
-    : name_(std::move(name)), order_(order), messageTtl_(messageTtl) 
+    std::optional<std::chrono::seconds> messageTtl, std::string sortKey)
+    : name_(std::move(name)), order_(order), messageTtl_(messageTtl), sortKey_(std::move(sortKey))
 {
     if (messageTtl_ && *messageTtl_ <= std::chrono::seconds::zero()) {
         throw std::invalid_argument("TTL очереди должен быть положительным");
+    }
+    if (order_ == QueueOrder::Sorted && sortKey_.empty()) {
+        throw std::invalid_argument("Для sorted-очереди требуется sort_key");
     }
 }
 
@@ -23,12 +26,68 @@ QueueOrder MemoryQueue::order() const {
     return order_;
 }
 
+int MemoryQueue::compareIntegerSortValues(const nlohmann::json& left, const nlohmann::json& right) {
+    if (!left.is_number_integer() || !right.is_number_integer()) {
+        throw std::logic_error("Ключи сортировки должны быть целыми числами");
+    }
+
+    auto compare = [](auto a, auto b) { 
+        return (a > b) - (a < b); 
+    };
+    const bool leftUnsigned = left.is_number_unsigned();
+    const bool rightUnsigned = right.is_number_unsigned();
+    using Signed = nlohmann::json::number_integer_t;
+    using Unsigned = nlohmann::json::number_unsigned_t;
+
+    if (leftUnsigned && rightUnsigned) {
+        return compare(left.get<Unsigned>(), right.get<Unsigned>());
+    }
+    if (!leftUnsigned && !rightUnsigned) {
+        return compare(left.get<Signed>(), right.get<Signed>());
+    }
+
+    // левое число беззнаковое а другое знаковое
+    if (leftUnsigned) {
+        const Signed value = right.get<Signed>();
+        if (value < 0) return 1; // знаковое отрицательное число меньше любого беззнакового 
+        return compare(left.get<Unsigned>(), static_cast<Unsigned>(value));
+    }
+
+    const Signed value = left.get<Signed>();
+    if (value < 0) return -1;
+    return compare(static_cast<Unsigned>(value), right.get<Unsigned>());
+}
+
+// сравнение записей в очереди по (ключ, sequence)
+bool MemoryQueue::isEntryBeforeBySortKey(const Entry& left, const Entry& right) {
+    if (!left.sortValue || !right.sortValue) {
+        throw std::logic_error("У записи с sorted порядком обработки сообщений отсутствует ключ сортировки");
+    }
+
+    const int keyComparison = compareIntegerSortValues(*left.sortValue, *right.sortValue);
+    if (keyComparison != 0) {
+        return keyComparison < 0;
+    }
+
+    return left.item.sequence < right.item.sequence;
+}
+
 /*добавление сообщения в очередь*/
 void MemoryQueue::push(Message message) {
     std::lock_guard<std::mutex> lock(mutex_);
     
     if (nextSequence_ == std::numeric_limits<std::uint64_t>::max()) {
         throw std::overflow_error("Исчерпаны порядковые номера очереди: " + name_);
+    }
+
+    // поиск в payload сообщения значения поля sort_key 
+    std::optional<nlohmann::json> sortValue;
+    if (order_ == QueueOrder::Sorted) {
+        const auto field = message.payload.find(sortKey_);
+        if (field == message.payload.end() || !field->is_number_integer()) {
+            throw std::invalid_argument("Для sorted-очереди требуется целочисленное поле payload: " + sortKey_);
+        }
+        sortValue = *field;
     }
 
     // момент когда TTL истечет = когда сообщение перестанет жить в очереди
@@ -41,7 +100,8 @@ void MemoryQueue::push(Message message) {
         Entry{
             SequencedMessage{nextSequence_, std::move(message)}, 
             std::nullopt, // сообщение еще никому не выдано
-            expiresAt
+            expiresAt,
+            std::move(sortValue)
         }
     );
 
@@ -51,6 +111,10 @@ void MemoryQueue::push(Message message) {
 // (для потребителя с NoAck QoS) ищет первое письмо с номером больше lastSequence
 std::optional<SequencedMessage> MemoryQueue::findNextMessageAfter(std::uint64_t lastSequence) {
     std::lock_guard<std::mutex> lock(mutex_);
+
+    if (order_ == QueueOrder::Sorted) {
+        throw std::logic_error("Чтение sorted-очереди пока не реализовано");
+    }
 
     removeExpiredMessagesLocked(std::chrono::steady_clock::now());
 
@@ -66,9 +130,57 @@ std::optional<SequencedMessage> MemoryQueue::findNextMessageAfter(std::uint64_t 
     return it->item;
 }
 
+std::optional<SortedReadResult> MemoryQueue::findNextSortedMessage(const std::optional<SortedReadPosition>& lastPosition) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (order_ != QueueOrder::Sorted) {
+        throw std::logic_error("Сортированное чтение доступно только для sorted-очереди");
+    }
+    if (lastPosition && !lastPosition->sortValue.is_number_integer()) {
+        throw std::invalid_argument("Позиция сортированного чтения должна содержать целый ключ");
+    }
+
+    // удаление писем чей TTL истек
+    removeExpiredMessagesLocked(std::chrono::steady_clock::now());
+
+    // ищет минимальную подходящую пару (ключ, sequence)
+    auto best = messages_.end();
+    for (auto it = messages_.begin(); it != messages_.end(); ++it) {
+        if (!it->sortValue) {
+            throw std::logic_error("У записи sorted-очереди отсутствует ключ сортировки");
+        }
+        if (lastPosition) {
+            const int keyComparison = compareIntegerSortValues(*it->sortValue, lastPosition->sortValue);
+            // меньший ключ нельзя отдавать; равный возможен только после последнего sequence
+            if (keyComparison < 0 || (keyComparison == 0 && it->item.sequence <= lastPosition->sequence)) {
+                continue;
+            }
+        }
+        if (best == messages_.end() || isEntryBeforeBySortKey(*it, *best)) {
+            best = it;
+        }
+    }
+
+    if (best == messages_.end()) {
+        return std::nullopt;
+    }
+
+    return SortedReadResult{
+        best->item, 
+        SortedReadPosition{
+            *best->sortValue, /*key*/ 
+            best->item.sequence /*sequence*/
+        }
+    };
+}
+
 // (для потребителя с WithAck QoS) выбирает сообщение из очереди и закрепляет его за указанным потребителем по clientId
 std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string& clientId, std::chrono::milliseconds ackTimeout) {
     std::lock_guard<std::mutex> lock(mutex_);
+
+    if (order_ == QueueOrder::Sorted) {
+        throw std::logic_error("Выдача sorted-очереди пока не реализована");
+    }
 
     if (ackTimeout <= std::chrono::milliseconds::zero()) {
         throw std::invalid_argument("Таймаут подтверждения должен быть положительным");

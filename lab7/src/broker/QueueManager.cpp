@@ -14,14 +14,22 @@ QueueManager::QueueManager(const std::vector<QueueConfig>& configs) {
             throw std::runtime_error("TTL очереди должен быть положительным: " + config.name);
         }
 
-        if (config.durability != "memory" || (config.order != "fifo" && config.order != "unordered")) {
-            unsupported_.emplace(config.name, "поддерживаются только memory + fifo/unordered");
-            Logger::log("Очередь " + config.name + " пока недоступна: поддерживаются только memory + fifo/unordered");
+        if (config.durability != "memory"
+            || (config.order != "fifo" && config.order != "unordered" && config.order != "sorted")) {
+            unsupported_.emplace(config.name, "поддерживаются только memory + fifo/unordered/sorted");
+            Logger::log("Очередь " + config.name + " пока недоступна");
             continue;
         }
 
         // 2 создать объект очереди и положить в мапу
-        QueueOrder order = config.order == "fifo" ? QueueOrder::Fifo : QueueOrder::Unordered;
+        QueueOrder order;
+        if (config.order == "fifo") {
+            order = QueueOrder::Fifo;
+        } else if (config.order == "unordered") {
+            order = QueueOrder::Unordered;
+        } else {
+            order = QueueOrder::Sorted;
+        }
         
         std::optional<std::chrono::seconds> ttl;
         if (config.messageTtl) {
@@ -30,7 +38,7 @@ QueueManager::QueueManager(const std::vector<QueueConfig>& configs) {
 
         queues_.emplace(
             config.name, 
-            std::make_unique<MemoryQueue>(config.name, order, ttl)
+            std::make_unique<MemoryQueue>(config.name, order, ttl, config.sortKey)
         );
         
         Logger::log("Создана очередь в памяти: " + config.name + ", порядок: " + config.order);

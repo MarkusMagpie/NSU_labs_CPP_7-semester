@@ -46,7 +46,11 @@ int main(int argc, char* argv[]) {
     struct Subscription {
         ConsumerQos qos; // QoS потребителя
         std::optional<int> ackTimeoutMs; // таймаут подтверждения получения сообщения 
-        std::uint64_t lastSequence = 0; // номер последнего выданного сообщения
+
+        // fifo/unordered - номер последнего выданного сообщения
+        std::uint64_t lastSequence = 0;
+        // sorted - последний key и sequence для очереди с sorted порядком обработки сообщений; nullopt - чтение не начиналось
+        std::optional<SortedReadPosition> lastSortedPosition;
     };
 
     // id клиента -> QoS производителя (пополняется declare_producer)
@@ -103,6 +107,10 @@ int main(int argc, char* argv[]) {
         bool sendReply = true;
         std::uint64_t* cursorToAdvance = nullptr;
         std::uint64_t deliveredSequence = 0;
+        // какую именно позицию подписки потом обновить
+        std::optional<SortedReadPosition>* sortedCursorToAdvance = nullptr;
+        // какое значение записать в sortedCursorToAdvance
+        std::optional<SortedReadPosition> deliveredSortedPosition;
         
         /* указатель на очередь в которой брокер в текущей итерации обработал запрос receive от потребителя WithAck */
         MemoryQueue* claimedQueue = nullptr;
@@ -145,7 +153,9 @@ int main(int argc, char* argv[]) {
                 subscriptions[client_id].insert_or_assign(envelope.queue,
                     Subscription{
                         *envelope.consumerQos, 
-                        envelope.ackTimeoutMs
+                        envelope.ackTimeoutMs,
+                        0,
+                        std::nullopt
                     }
                 );
 
@@ -175,19 +185,36 @@ int main(int argc, char* argv[]) {
 
                 // получение письма варьируется от QoS потребителя
                 if (state.qos == ConsumerQos::NoAck) {
-                    // брокер ищет СЛЕДУЮЩЕЕ письмо очереди (при этом не удаляет)
-                    std::optional<SequencedMessage> message = queue.findNextMessageAfter(state.lastSequence);
-                    if (message) {
-                        deliveryQueue = &queue;
-                        reply.type = MsgType::Deliver;
-                        reply.msgId = message->message.id;
-                        reply.producerId = message->message.producerId;
-                        reply.payload = message->message.payload;
+                    if (queue.order() == QueueOrder::Sorted) {
+                        // выбор следующего письма по (key, sequence)
+                        auto result = queue.findNextSortedMessage(state.lastSortedPosition);
+                        if (result) {
+                            deliveryQueue = &queue;
+                            reply.type = MsgType::Deliver;
+                            reply.msgId = result->item.message.id;
+                            reply.producerId = result->item.message.producerId;
+                            reply.payload = result->item.message.payload;
 
-                        cursorToAdvance = &state.lastSequence;
-                        deliveredSequence = message->sequence;
+                            sortedCursorToAdvance = &state.lastSortedPosition;
+                            deliveredSortedPosition = std::move(result->position);
+                        } else {
+                            reply.type = MsgType::NoMessage;
+                        }
                     } else {
-                        reply.type = MsgType::NoMessage;
+                        // fifo и unordered читаются по sequence, не удаляя письмо
+                        std::optional<SequencedMessage> message = queue.findNextMessageAfter(state.lastSequence);
+                        if (message) {
+                            deliveryQueue = &queue;
+                            reply.type = MsgType::Deliver;
+                            reply.msgId = message->message.id;
+                            reply.producerId = message->message.producerId;
+                            reply.payload = message->message.payload;
+
+                            cursorToAdvance = &state.lastSequence;
+                            deliveredSequence = message->sequence;
+                        } else {
+                            reply.type = MsgType::NoMessage;
+                        }
                     }
                 } else if (state.qos == ConsumerQos::WithAck) {
                     // найти следующее сообщение и зарезервировать его для выдачи с подтверждением указанному потребителю (по его client_id)
@@ -309,6 +336,7 @@ int main(int argc, char* argv[]) {
             }
             deliveryQueue = nullptr;
             cursorToAdvance = nullptr;
+            sortedCursorToAdvance = nullptr;
             Logger::log("Ошибка обработки конверта: " + std::string(error.what()));
             
             reply.type = MsgType::Error;
@@ -327,6 +355,7 @@ int main(int argc, char* argv[]) {
             reply.queue = queueName;
 
             cursorToAdvance = nullptr;
+            sortedCursorToAdvance = nullptr;
             claimedQueue = nullptr;
         }
 
@@ -346,6 +375,9 @@ int main(int argc, char* argv[]) {
         }
         if (cursorToAdvance) {
             *cursorToAdvance = deliveredSequence;
+        }
+        if (sortedCursorToAdvance) {
+            *sortedCursorToAdvance = std::move(deliveredSortedPosition);
         }
     }
 }
