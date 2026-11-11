@@ -11,6 +11,11 @@ queues:
     durability: "memory"
     order: "unordered"
 
+  - name: "MemoryTtlQueue"
+    durability: "memory"
+    order: "fifo"
+    message_ttl: 30
+
   - name: "HighPriorityQueue"
     durability: "disk"
     order: "fifo"

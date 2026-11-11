@@ -130,12 +130,14 @@ std::optional<SequencedMessage> MemoryQueue::findNextMessageAfter(std::uint64_t 
     return it->item;
 }
 
+// (для потребителя с NoAck QoS и sorted order)
 std::optional<SortedReadResult> MemoryQueue::findNextSortedMessage(const std::optional<SortedReadPosition>& lastPosition) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (order_ != QueueOrder::Sorted) {
-        throw std::logic_error("Сортированное чтение доступно только для sorted-очереди");
-    }
+    // if (order_ != QueueOrder::Sorted) {
+    //     throw std::logic_error("Сортированное чтение доступно только для sorted-очереди");
+    // }
+
     if (lastPosition && !lastPosition->sortValue.is_number_integer()) {
         throw std::invalid_argument("Позиция сортированного чтения должна содержать целый ключ");
     }
@@ -178,9 +180,9 @@ std::optional<SortedReadResult> MemoryQueue::findNextSortedMessage(const std::op
 std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string& clientId, std::chrono::milliseconds ackTimeout) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (order_ == QueueOrder::Sorted) {
-        throw std::logic_error("Выдача sorted-очереди пока не реализована");
-    }
+    // if (order_ == QueueOrder::Sorted) {
+    //     throw std::logic_error("Выдача sorted-очереди пока не реализована");
+    // }
 
     if (ackTimeout <= std::chrono::milliseconds::zero()) {
         throw std::invalid_argument("Таймаут подтверждения должен быть положительным");

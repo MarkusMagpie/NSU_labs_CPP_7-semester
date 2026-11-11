@@ -47,10 +47,12 @@ int main(int argc, char* argv[]) {
         ConsumerQos qos; // QoS потребителя
         std::optional<int> ackTimeoutMs; // таймаут подтверждения получения сообщения 
 
-        // fifo/unordered - номер последнего выданного сообщения
+        /*--- брокер запоминает что он уже прочитал у каждого подписчика ---*/
+        // fifo/unordered order - sequence последнего выданного сообщения
         std::uint64_t lastSequence = 0;
-        // sorted - последний key и sequence для очереди с sorted порядком обработки сообщений; nullopt - чтение не начиналось
+        // sorted order - (key, sequence) последнего выданного сообщения; nullopt - чтение не начиналось
         std::optional<SortedReadPosition> lastSortedPosition;
+        /*------------------------------------------------------------------*/
     };
 
     // id клиента -> QoS производителя (пополняется declare_producer)
@@ -102,15 +104,24 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        // разбор json фрейма + составление ответа ROUTERа клиенту
+        // ответ ROUTERа клиенту
         Envelope reply;
         bool sendReply = true;
+
+        /*--- по 2: позволяют выбрать письмо сейчас но обновить позицию подписчика позже - только после передачи ответа сокету --- */
+        /* FIFO/UNORDERED */
+        // указатель на поле подписки которое после отправки потребителю обновить
         std::uint64_t* cursorToAdvance = nullptr;
+        // какое значение записать в cursorToAdvance после передачи ответа
         std::uint64_t deliveredSequence = 0;
-        // какую именно позицию подписки потом обновить
+
+        /* SORTED */
+        // та же пара переменных что выше, только теперь не 1 число а два (key, sequence)
+        // какую именно позицию подписки после отправки потребителю обновить
         std::optional<SortedReadPosition>* sortedCursorToAdvance = nullptr;
-        // какое значение записать в sortedCursorToAdvance
+        // какое значение записать в sortedCursorToAdvance после передачи ответа
         std::optional<SortedReadPosition> deliveredSortedPosition;
+        /*-------------------------------------------------------------------------------------------------------------------------*/
         
         /* указатель на очередь в которой брокер в текущей итерации обработал запрос receive от потребителя WithAck */
         MemoryQueue* claimedQueue = nullptr;
@@ -186,7 +197,7 @@ int main(int argc, char* argv[]) {
                 // получение письма варьируется от QoS потребителя
                 if (state.qos == ConsumerQos::NoAck) {
                     if (queue.order() == QueueOrder::Sorted) {
-                        // выбор следующего письма по (key, sequence)
+                        // sorted выбор следующего письма по (key, sequence)
                         auto result = queue.findNextSortedMessage(state.lastSortedPosition);
                         if (result) {
                             deliveryQueue = &queue;
@@ -195,13 +206,14 @@ int main(int argc, char* argv[]) {
                             reply.producerId = result->item.message.producerId;
                             reply.payload = result->item.message.payload;
 
+                            // эту позицию конкретного подписчика нужно будет обновить после отправки ему письма 
                             sortedCursorToAdvance = &state.lastSortedPosition;
-                            deliveredSortedPosition = std::move(result->position);
+                            deliveredSortedPosition = std::move(result->position); // {key=sortValue = 10, sequence = 3}
                         } else {
                             reply.type = MsgType::NoMessage;
                         }
                     } else {
-                        // fifo и unordered читаются по sequence, не удаляя письмо
+                        // fifo/unordered выбирают следующее письмо читая только sequence
                         std::optional<SequencedMessage> message = queue.findNextMessageAfter(state.lastSequence);
                         if (message) {
                             deliveryQueue = &queue;
@@ -210,6 +222,7 @@ int main(int argc, char* argv[]) {
                             reply.producerId = message->message.producerId;
                             reply.payload = message->message.payload;
 
+                            // эту позицию конкретного подписчика нужно будет обновить после отправки ему письма 
                             cursorToAdvance = &state.lastSequence;
                             deliveredSequence = message->sequence;
                         } else {
@@ -356,6 +369,7 @@ int main(int argc, char* argv[]) {
 
             cursorToAdvance = nullptr;
             sortedCursorToAdvance = nullptr;
+
             claimedQueue = nullptr;
         }
 
@@ -373,11 +387,17 @@ int main(int argc, char* argv[]) {
             if (claimedQueue) claimedQueue->releaseActiveDelivery(client_id, reply.msgId, reply.deliveryAttemptId);
             continue;
         }
+
+        /* --- ПОСЛЕ ПЕРЕДАЧИ БРОКЕРОМ ОТВЕТА ОБНОВЛЯЮ ПОЗИЦИЮ ПОТРЕБИТЕЛЯ В ОЧЕРЕДИ --- */
+        // fifo/unordered
         if (cursorToAdvance) {
             *cursorToAdvance = deliveredSequence;
         }
+        // sorted
         if (sortedCursorToAdvance) {
+            // изменение subscriptions[этот клиент][эта очередь].lastSortedPosition
             *sortedCursorToAdvance = std::move(deliveredSortedPosition);
         }
+        /* ------------------------------------------------------------------------------*/
     }
 }

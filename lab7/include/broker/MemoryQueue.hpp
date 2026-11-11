@@ -24,11 +24,11 @@ struct SequencedMessage {
 
 // письмо которое потребитель получил последним в сортированном порядке
 struct SortedReadPosition {
-    nlohmann::json sortValue; // значение ключа последнего выданного письма
+    nlohmann::json sortValue; // = key
     std::uint64_t sequence;
 };
 
-// результат поиска
+// результат поиска письма для потребителя с sorted order
 struct SortedReadResult {
     SequencedMessage item; // копия найденного письма
     SortedReadPosition position;
