@@ -1,0 +1,7 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(cppzmq CONFIG)
+find_dependency(nlohmann_json CONFIG)
+
+include("${CMAKE_CURRENT_LIST_DIR}/Lab7ClientTargets.cmake")
