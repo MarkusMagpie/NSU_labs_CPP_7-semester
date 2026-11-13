@@ -1,0 +1,8 @@
+broker:
+  bind: "tcp://127.0.0.1:5557"
+  data_dir: "data/scenario"
+
+queues:
+  - name: "DiskScenarioQueue"
+    durability: "disk"
+    order: "fifo"

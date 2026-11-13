@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <chrono>
 #include <deque>
+#include <filesystem>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -48,7 +49,7 @@ struct Delivery {
     std::optional<SortedReadPosition> sortedPosition; // для очереди с sorted order: позиция письма переданного потребителю
 };
 
-class MemoryQueue {
+class Queue {
 private:
     // запись в очереди   
     struct Entry {
@@ -56,7 +57,7 @@ private:
         // active = nullopt -> письмо доступно для выдачи потребителю с WithAck
         // active заполнено -> письмо выдано и ожидает подтверждения потребителем с withack
         std::optional<ActiveDelivery> active; // информация о выдаче
-        std::optional<std::chrono::steady_clock::time_point> expiresAt; // момент истечения TTL = сообщение перестанет жить в очереди
+        std::optional<std::chrono::steady_clock::time_point> expiresAt; // момент истечения TTL = момент когда сообщение перестает жить в очереди
         std::optional<nlohmann::json> sortValue; // целое знаковое или беззнаковое значение sortKey (key)
     };
     
@@ -64,6 +65,11 @@ private:
     const QueueOrder order_;
     const std::optional<std::chrono::seconds> messageTtl_;
     const std::string sortKey_; // имя числового поля внутри payload
+    /*
+    diskDir_ = nullopt -> очередь в памяти
+    diskDir_ = путь к каталогу -> очередь с сохранением на диск
+    */
+    const std::optional<std::filesystem::path> diskDir_;
 
     std::deque<Entry> messages_;
     mutable std::mutex mutex_; // messages_ def
@@ -85,10 +91,21 @@ private:
     std::size_t releaseExpiredDeliveriesLocked(std::chrono::steady_clock::time_point now);
     // удаляет сообщения у которых истек ttl
     std::size_t removeExpiredMessagesLocked(std::chrono::steady_clock::time_point now);
+
+    // загружает сохраненные сообщения дисковой очереди с диска в оперативную память процесса брокера
+    void restoreFromDisk();
+    // удалить файл конкретного сообщения
+    void removeDiskMessage(std::uint64_t sequence);
+    // сохранить счетчики очереди
+    void saveDiskCounters(
+        std::uint64_t nextSequence, 
+        std::uint64_t nextDeliveryAttemptId
+    );
 public:
-    MemoryQueue(std::string name, QueueOrder order,
+    Queue(std::string name, QueueOrder order,
         std::optional<std::chrono::seconds> messageTtl = std::nullopt,
-        std::string sortKey = {});
+        std::string sortKey = {},
+        std::optional<std::filesystem::path> diskDir = std::nullopt);
 
     const std::string& name() const;
     QueueOrder order() const;

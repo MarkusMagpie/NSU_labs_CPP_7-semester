@@ -3,12 +3,15 @@
 #include <stdexcept>
 #include <utility>
 
-#include <broker/MemoryQueue.hpp>
+#include <broker/Queue.hpp>
+#include <broker/DiskStorage.hpp>
 #include <common/Logger.hpp>
 
-MemoryQueue::MemoryQueue(std::string name, QueueOrder order,
-    std::optional<std::chrono::seconds> messageTtl, std::string sortKey)
-    : name_(std::move(name)), order_(order), messageTtl_(messageTtl), sortKey_(std::move(sortKey))
+Queue::Queue(std::string name, QueueOrder order,
+    std::optional<std::chrono::seconds> messageTtl, std::string sortKey,
+    std::optional<std::filesystem::path> diskDir)
+    : name_(std::move(name)), order_(order), messageTtl_(messageTtl),
+      sortKey_(std::move(sortKey)), diskDir_(std::move(diskDir))
 {
     if (messageTtl_ && *messageTtl_ <= std::chrono::seconds::zero()) {
         throw std::invalid_argument("TTL очереди должен быть положительным");
@@ -16,18 +19,151 @@ MemoryQueue::MemoryQueue(std::string name, QueueOrder order,
     if (order_ == QueueOrder::Sorted && sortKey_.empty()) {
         throw std::invalid_argument("Для sorted-очереди требуется sort_key");
     }
+
+    if (diskDir_) restoreFromDisk();
 }
 
-const std::string& MemoryQueue::name() const {
+void Queue::restoreFromDisk() {
+    // создает или открывает директорию очереди
+    std::filesystem::create_directories(*diskDir_);
+
+    const auto statePath = *diskDir_ / "state.json";
+    
+    if (std::filesystem::exists(statePath)) {
+        // читает state.json -> next_sequence и next_delivery_attempt_id
+        const auto state = DiskStorage::readJson(statePath);
+        if (!state.contains("next_sequence") 
+            || !state["next_sequence"].is_number_unsigned()
+            || !state.contains("next_delivery_attempt_id") 
+            || !state["next_delivery_attempt_id"].is_number_unsigned()) {
+            throw std::runtime_error("некоректен счетчик очереди: " + statePath.string());
+        }
+
+        nextSequence_ = state["next_sequence"].get<std::uint64_t>();
+        nextDeliveryAttemptId_ = state["next_delivery_attempt_id"].get<std::uint64_t>();
+
+        if (nextSequence_ == 0 || nextDeliveryAttemptId_ == 0) {
+            throw std::runtime_error("некорректные счетчики очереди: " + statePath.string());
+        }
+    } else {
+        // проход всех файлов в директории и проверка расширения
+        for (const auto& file : std::filesystem::directory_iterator(*diskDir_)) {
+            if (file.path().extension() == ".json") {
+                throw std::runtime_error("Отсутствует state.json непустой очереди: " + diskDir_->string());
+            }
+        }
+
+        // создание state.json
+        saveDiskCounters(nextSequence_, nextDeliveryAttemptId_);
+    }
+
+    // обход файлов сообщений очереди
+    for (const auto& file : std::filesystem::directory_iterator(*diskDir_)) {
+        const auto path = file.path();
+        
+        if (path == statePath || path.extension() != ".json") continue;
+        if (!file.is_regular_file()) throw std::runtime_error("Ожидался файл сообщения: " + path.string());
+        
+        try {
+            const auto value = DiskStorage::readJson(path);
+            if (!value.at("sequence").is_number_unsigned() 
+                || !value.at("msg_id").is_string()
+                || !value.at("producer_id").is_string() 
+                || !value.contains("payload")
+                || (!value.at("expires_at_ms").is_null() && !value.at("expires_at_ms").is_number_integer())) {
+                throw std::runtime_error("неверные поля в сообщении на диске");
+            }
+
+            const auto sequence = value.at("sequence").get<std::uint64_t>();
+            if (sequence == 0 
+                || sequence >= nextSequence_ 
+                || path.filename() != std::to_string(sequence) + ".json") {
+                throw std::runtime_error("неверный sequence или имя файла на диске");
+            }
+
+            Message message{
+                value.at("msg_id").get<std::string>(),
+                value.at("producer_id").get<std::string>(), 
+                value.at("payload")
+            };
+            if (message.id.empty() || message.producerId.empty()) {
+                throw std::runtime_error("пустой идентификатор");
+            }
+
+            // извдечение из сообщения ключа сортировки
+            std::optional<nlohmann::json> sortValue;
+            if (order_ == QueueOrder::Sorted) {
+                const auto field = message.payload.find(sortKey_);
+                if (field == message.payload.end() || !field->is_number_integer()) {
+                    throw std::runtime_error("отсутствует целый ключ сортировки");
+                }
+
+                sortValue = *field;
+            }
+
+            // проверка TTL сообщения
+            std::optional<std::chrono::steady_clock::time_point> expiresAt;
+            if (!value.at("expires_at_ms").is_null()) {
+                const auto expiry = std::chrono::system_clock::time_point(
+                    std::chrono::milliseconds(value.at("expires_at_ms").get<std::int64_t>())
+                );
+
+                const auto systemNow = std::chrono::system_clock::now();
+                
+                if (expiry <= systemNow) {
+                    removeDiskMessage(sequence);
+                    continue;
+                }
+                expiresAt = std::chrono::steady_clock::now() + (expiry - systemNow);
+            }
+
+            messages_.push_back(
+                Entry{SequencedMessage{sequence, std::move(message)},
+                std::nullopt, 
+                expiresAt, 
+                std::move(sortValue)}
+            );
+        } catch (const std::exception& error) {
+            throw std::runtime_error("Ошибка восстановления " + path.string() + ": " + error.what());
+        }
+    }
+
+    std::sort(messages_.begin(), messages_.end(), 
+        [](const Entry& a, const Entry& b) {
+            return a.item.sequence < b.item.sequence;
+        }
+    );
+}
+
+void Queue::saveDiskCounters(std::uint64_t nextSequence, std::uint64_t nextDeliveryAttemptId) {
+    if (diskDir_) {
+        DiskStorage::writeJson(
+            *diskDir_ / "state.json", 
+            {
+                {"next_sequence", nextSequence}, 
+                {"next_delivery_attempt_id", nextDeliveryAttemptId}
+            }
+        );
+    }
+}
+
+void Queue::removeDiskMessage(std::uint64_t sequence) {
+    if (diskDir_ 
+        && !std::filesystem::remove(*diskDir_ / (std::to_string(sequence) + ".json"))) {
+        throw std::runtime_error("Файл сообщения не найден в очереди " + name_);
+    }
+}
+
+const std::string& Queue::name() const {
     return name_;
 }
 
-QueueOrder MemoryQueue::order() const {
+QueueOrder Queue::order() const {
     return order_;
 }
 
 // -1: left < right; 0: равны; 1: left > right
-int MemoryQueue::compareIntegerSortValues(const nlohmann::json& left, const nlohmann::json& right) {
+int Queue::compareIntegerSortValues(const nlohmann::json& left, const nlohmann::json& right) {
     if (!left.is_number_integer() || !right.is_number_integer()) {
         throw std::logic_error("Ключи сортировки должны быть целыми числами");
     }
@@ -60,7 +196,7 @@ int MemoryQueue::compareIntegerSortValues(const nlohmann::json& left, const nloh
 }
 
 // сравнение записей в очереди по (ключ, sequence)
-bool MemoryQueue::isEntryBeforeBySortKey(const Entry& left, const Entry& right) {
+bool Queue::isEntryBeforeBySortKey(const Entry& left, const Entry& right) {
     if (!left.sortValue || !right.sortValue) {
         throw std::logic_error("У записи с sorted порядком обработки сообщений отсутствует ключ сортировки");
     }
@@ -74,8 +210,8 @@ bool MemoryQueue::isEntryBeforeBySortKey(const Entry& left, const Entry& right) 
 }
 
 /*добавление сообщения в очередь*/
-void MemoryQueue::push(Message message) {
-    std::lock_guard<std::mutex> lock(mutex_);
+void Queue::push(Message message) {
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
     
     if (nextSequence_ == std::numeric_limits<std::uint64_t>::max()) {
         throw std::overflow_error("Исчерпаны порядковые номера очереди: " + name_);
@@ -93,24 +229,57 @@ void MemoryQueue::push(Message message) {
 
     // момент когда TTL истечет = когда сообщение перестанет жить в очереди
     std::optional<std::chrono::steady_clock::time_point> expiresAt;
+    nlohmann::json expiresAtMs = nullptr;
     if (messageTtl_) {
+        // 1 для проверок во время текущей работы брокера
         expiresAt = std::chrono::steady_clock::now() + *messageTtl_;
+        // 2 время сохраняемое в файл если "durability: disk"
+        expiresAtMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            (std::chrono::system_clock::now() + *messageTtl_).time_since_epoch()
+            ).count();
     }
+
+    const auto sequence = nextSequence_;
+    if (diskDir_) {
+        // резерв sequence заранее чтобы он не повторился после сбоя или удаления
+        saveDiskCounters(nextSequence_ + 1, nextDeliveryAttemptId_);
+    }
+    ++nextSequence_;
 
     messages_.push_back(
         Entry{
-            SequencedMessage{nextSequence_, std::move(message)}, 
+            SequencedMessage{sequence, std::move(message)},
             std::nullopt, // сообщение еще никому не выдано
             expiresAt,
             std::move(sortValue)
         }
     );
 
-    ++nextSequence_;
-}
+    if (diskDir_) {
+        const Entry& entry = messages_.back();
+        const auto path = *diskDir_ / (std::to_string(entry.item.sequence) + ".json");
+
+        try {
+            if (std::filesystem::exists(path)) {
+                throw std::runtime_error("Файл сообщения уже существует на диске: " + path.string());
+            }
+
+            DiskStorage::writeJson(path, 
+                {{"sequence", entry.item.sequence},
+                {"msg_id", entry.item.message.id}, 
+                {"producer_id", entry.item.message.producerId},
+                {"payload", entry.item.message.payload}, 
+                {"expires_at_ms", expiresAtMs}
+            });
+        } catch (...) {
+            messages_.pop_back();
+            throw;
+        }
+    }
+} // mutex.unlock()
 
 // (для потребителя с NoAck QoS) ищет первое письмо с номером больше lastSequence
-std::optional<SequencedMessage> MemoryQueue::findNextMessageAfter(std::uint64_t lastSequence) {
+std::optional<SequencedMessage> Queue::findNextMessageAfter(std::uint64_t lastSequence) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (order_ == QueueOrder::Sorted) {
@@ -132,7 +301,7 @@ std::optional<SequencedMessage> MemoryQueue::findNextMessageAfter(std::uint64_t 
 }
 
 // (для потребителя с NoAck QoS и sorted order)
-std::optional<SortedReadResult> MemoryQueue::findNextSortedMessage(const std::optional<SortedReadPosition>& lastPosition) {
+std::optional<SortedReadResult> Queue::findNextSortedMessage(const std::optional<SortedReadPosition>& lastPosition) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     // if (order_ != QueueOrder::Sorted) {
@@ -178,7 +347,7 @@ std::optional<SortedReadResult> MemoryQueue::findNextSortedMessage(const std::op
 }
 
 // (для потребителя с WithAck QoS) выбирает сообщение из очереди и закрепляет его за указанным потребителем по clientId
-std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string& clientId, 
+std::optional<Delivery> Queue::reserveNextMessageForAck(const std::string& clientId, 
     std::chrono::milliseconds ackTimeout,
     const std::optional<SortedReadPosition>& lastSortedPosition) 
 {
@@ -244,9 +413,15 @@ std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string&
     }
 
     // 2 - РЕЗЕРВИРОВАНИЕ = запись в active письма какому клиенту и в рамках какой попытки оно выдано 
+    /* --- для очередей с durability: disk --- */
+    const auto attemptId = nextDeliveryAttemptId_;
+    saveDiskCounters(nextSequence_, nextDeliveryAttemptId_ + 1);
+    ++nextDeliveryAttemptId_;
+    /* --------------------------------------- */
+
     Delivery delivery{
         it->item.message, 
-        std::to_string(nextDeliveryAttemptId_),
+        std::to_string(attemptId),
         std::nullopt
     };
     if (order_ == QueueOrder::Sorted) {
@@ -260,13 +435,11 @@ std::optional<Delivery> MemoryQueue::reserveNextMessageForAck(const std::string&
     };
 
     // 3 - теперь сообщение закреплено брокером за потребителем и выдано ему  
-    ++nextDeliveryAttemptId_;
-    
     return delivery;
 }
 
 // проверка ack и удаление письма из очереди
-bool MemoryQueue::confirmDeliveryAndRemoveMessage(const std::string& clientId, 
+bool Queue::confirmDeliveryAndRemoveMessage(const std::string& clientId, 
     const std::string& messageId, 
     const std::string& deliveryAttemptId) 
 {
@@ -303,12 +476,16 @@ bool MemoryQueue::confirmDeliveryAndRemoveMessage(const std::string& clientId,
         return false;
     }
 
-    messages_.erase(it); // удаление выбранного письма из очереди
+    // удаление выбранного письма из очереди на диске
+    removeDiskMessage(it->item.sequence);
+
+    // удаление выбранного письма из очереди в памяти
+    messages_.erase(it);
 
     return true;
 }
 
-std::size_t MemoryQueue::releaseExpiredDeliveriesLocked(std::chrono::steady_clock::time_point now) {
+std::size_t Queue::releaseExpiredDeliveriesLocked(std::chrono::steady_clock::time_point now) {
     std::size_t released = 0;
     for (Entry& entry : messages_) {
         if (entry.active 
@@ -322,24 +499,26 @@ std::size_t MemoryQueue::releaseExpiredDeliveriesLocked(std::chrono::steady_cloc
     return released;
 }
 
-std::size_t MemoryQueue::releaseExpiredDeliveries() {
+std::size_t Queue::releaseExpiredDeliveries() {
     std::lock_guard<std::mutex> lock(mutex_);
 
     return releaseExpiredDeliveriesLocked(std::chrono::steady_clock::now());
 }
 
-std::size_t MemoryQueue::removeExpiredMessagesLocked(std::chrono::steady_clock::time_point now) {
+std::size_t Queue::removeExpiredMessagesLocked(std::chrono::steady_clock::time_point now) {
     const auto oldSize = messages_.size();
 
     // удаление из messages_ всех записей для которых условие вернуло true
-    auto newEnd = std::remove_if(
-        messages_.begin(), 
-        messages_.end(),
-        [now](const Entry& entry) { 
-            return entry.expiresAt && now >= *entry.expiresAt; 
-        });
-    messages_.erase(newEnd, messages_.end()
-    );
+    for (auto it = messages_.begin(); it != messages_.end();) {
+        if (it->expiresAt && now >= *it->expiresAt) {
+            // удаление файла если очередь дисковая
+            removeDiskMessage(it->item.sequence);
+            // удаление записи из очереди на памяти
+            it = messages_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 
     const std::size_t removed = oldSize - messages_.size();
     if (removed > 0) {
@@ -349,13 +528,13 @@ std::size_t MemoryQueue::removeExpiredMessagesLocked(std::chrono::steady_clock::
     return removed;
 }
 
-std::size_t MemoryQueue::removeExpiredMessages() {
+std::size_t Queue::removeExpiredMessages() {
     std::lock_guard<std::mutex> lock(mutex_);
 
     return removeExpiredMessagesLocked(std::chrono::steady_clock::now());
 }
 
-bool MemoryQueue::isMessageAvailable(const std::string& messageId) {
+bool Queue::isMessageAvailable(const std::string& messageId) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     removeExpiredMessagesLocked(std::chrono::steady_clock::now());
@@ -366,7 +545,7 @@ bool MemoryQueue::isMessageAvailable(const std::string& messageId) {
 }
 
 // удаление пометок выдачи письма при отписке клиента от очереди 
-void MemoryQueue::releaseAllDeliveriesForClient(const std::string& clientId) {
+void Queue::releaseAllDeliveriesForClient(const std::string& clientId) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     for (Entry& entry : messages_) {
@@ -377,7 +556,7 @@ void MemoryQueue::releaseAllDeliveriesForClient(const std::string& clientId) {
 }
 
 // отменить одно резервирование|одну активную выдачу письма клиенту при проблеме с выдачей
-void MemoryQueue::releaseActiveDelivery(const std::string& clientId, const std::string& messageId, const std::string& deliveryAttemptId) {
+void Queue::releaseActiveDelivery(const std::string& clientId, const std::string& messageId, const std::string& deliveryAttemptId) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     for (Entry& entry : messages_) {
@@ -391,7 +570,7 @@ void MemoryQueue::releaseActiveDelivery(const std::string& clientId, const std::
     }
 }
 
-std::size_t MemoryQueue::size() const {
+std::size_t Queue::size() const {
     std::lock_guard<std::mutex> lock(mutex_);
 
     return messages_.size();

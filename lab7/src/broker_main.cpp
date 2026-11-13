@@ -33,8 +33,7 @@ int main(int argc, char* argv[]) {
         Logger::log(line);
     }
 
-    QueueManager queues(config.queues);
-    std::uint64_t nextMessageId = 1;
+    QueueManager queues(config.queues, config.dataDir);
 
     // 2 - ZeroMQ привязь сокета на адрес из yaml конфига 
     zmq::context_t context(1);
@@ -124,8 +123,8 @@ int main(int argc, char* argv[]) {
         /*-------------------------------------------------------------------------------------------------------------------------*/
         
         /* указатель на очередь в которой брокер в текущей итерации обработал запрос receive от потребителя WithAck */
-        MemoryQueue* claimedQueue = nullptr;
-        MemoryQueue* deliveryQueue = nullptr;
+        Queue* claimedQueue = nullptr;
+        Queue* deliveryQueue = nullptr;
         const std::string client_id = identity.to_string();
         try {
             Envelope envelope = Envelope::fromJson(body);
@@ -191,7 +190,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 Subscription& state = subscription->second;
-                MemoryQueue& queue = queues.get(envelope.queue);
+                Queue& queue = queues.get(envelope.queue);
                 reply.queue = envelope.queue;
 
                 // получение письма варьируется от QoS потребителя
@@ -275,7 +274,7 @@ int main(int argc, char* argv[]) {
                     throw std::runtime_error("Для ack требуются queue, msg_id и delivery_attempt_id");
                 }
 
-                MemoryQueue& queue = queues.get(envelope.queue);
+                Queue& queue = queues.get(envelope.queue);
                 
                 /*
                 в очереди ищется письмо в котором: 
@@ -337,16 +336,18 @@ int main(int argc, char* argv[]) {
                 }
 
                 // найти очередь в брокере по ее названию в письме
-                MemoryQueue& queue = queues.get(envelope.queue);
+                Queue& queue = queues.get(envelope.queue);
 
                 Message message{
-                    std::to_string(nextMessageId++), 
+                    queues.allocateMessageId(), // выделение идентификатора письма
                     envelope.producerId, 
                     envelope.payload
                 };
                 reply.msgId = message.id;
                 reply.queue = envelope.queue;
+
                 queue.push(std::move(message)); // запись письма в конец очереди
+
                 Logger::log("Сообщение #" + reply.msgId + " добавлено в очередь " + envelope.queue);
                 reply.payload = "Сообщение добавлено в очередь";
             } else {

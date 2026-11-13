@@ -62,11 +62,12 @@ target_link_libraries(lab7_protocol PUBLIC
 )
 target_compile_features(lab7_protocol PUBLIC cxx_std_20)
 
-# модель хранения сообщений в памяти у брокера
+# очереди и хранение сообщений брокера
 if(BUILD_BROKER)
 add_library(lab7_broker_core STATIC
-  src/broker/MemoryQueue.cpp
+  src/broker/Queue.cpp
   src/broker/QueueManager.cpp
+  src/broker/DiskStorage.cpp
 )
 target_include_directories(lab7_broker_core PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -133,6 +134,10 @@ install(FILES
 # проверка 3 выдачи sorted-очереди потребителям with_ack
 # add_executable(m4_with_ack_scenario src/m4_with_ack_scenario.cpp)
 # target_link_libraries(m4_with_ack_scenario PRIVATE lab7_client lab7_protocol Threads::Threads)
+
+# восстановление дисковой очереди
+add_executable(disk_scenario EXCLUDE_FROM_ALL src/disk_scenario.cpp)
+target_link_libraries(disk_scenario PRIVATE lab7_client lab7_protocol)
 
 if(BUILD_BROKER)
 add_executable(broker src/broker_main.cpp)
