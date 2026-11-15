@@ -9,6 +9,7 @@
 #include <utility>
 
 #include <broker/QueueManager.hpp>
+#include <broker/RecoveryStore.hpp>
 #include <common/Logger.hpp>
 #include <common/YamlConfig.hpp>
 #include <protocol/Envelope.hpp>
@@ -34,6 +35,7 @@ int main(int argc, char* argv[]) {
     }
 
     QueueManager queues(config.queues, config.dataDir);
+    RecoveryStore recovery;
 
     // 2 - ZeroMQ привязь сокета на адрес из yaml конфига 
     zmq::context_t context(1);
@@ -51,6 +53,7 @@ int main(int argc, char* argv[]) {
         std::uint64_t lastSequence = 0;
         // sorted order - (key, sequence) последнего выданного сообщения; nullopt - чтение не начиналось
         std::optional<SortedReadPosition> lastSortedPosition;
+        std::string recoveryClientId; // постоянный client_id для Recovery QoS
         /*------------------------------------------------------------------*/
     };
 
@@ -156,6 +159,28 @@ int main(int argc, char* argv[]) {
                     throw std::runtime_error("Для with_ack QoS требуется положительный ack_timeout_ms");
                 }
 
+                if (*envelope.consumerQos == ConsumerQos::Recovery) {
+                    if (envelope.clientId.empty()) {
+                        throw std::runtime_error("Для recovery требуется постоянный client_id");
+                    }
+
+                    // если есть то загрузка сохраненного состояния пары очередь + клиент
+                    recovery.load(queues.get(envelope.queue), envelope.clientId);
+
+                    // новое соединение заменяет старую подписку с тем же (client_id, очередь)
+                    for (auto& [identity, clientQueues] : subscriptions) {
+                        if (identity == client_id) continue;
+                        
+                        auto old = clientQueues.find(envelope.queue);
+
+                        if (old != clientQueues.end() 
+                            && old->second.qos == ConsumerQos::Recovery
+                            && old->second.recoveryClientId == envelope.clientId) {
+                            clientQueues.erase(old);
+                        }
+                    }
+                }
+
                 // повторная подписка отменяет старые выдачи этого клиента в очереди
                 queues.get(envelope.queue).releaseAllDeliveriesForClient(client_id);
                 
@@ -165,7 +190,8 @@ int main(int argc, char* argv[]) {
                         *envelope.consumerQos, 
                         envelope.ackTimeoutMs,
                         0,
-                        std::nullopt
+                        std::nullopt,
+                        *envelope.consumerQos == ConsumerQos::Recovery ? envelope.clientId : std::string{}
                     }
                 );
 
@@ -266,34 +292,116 @@ int main(int argc, char* argv[]) {
                     } else {
                         reply.type = MsgType::NoMessage;
                     }
+                } else if (state.qos == ConsumerQos::Recovery) {
+                    // загрузка состояния потребителя: last acked + еще не acked positions
+                    auto position = recovery.load(queue, state.recoveryClientId);
+                    std::optional<SequencedMessage> message;
+
+                    // у потребителя есть неподтвержденное сообщение
+                    if (position.pending) {
+                        // попытка снова найти это неподтвержденное письмо по sequence
+                        message = queue.findMessageBySequence(position.pending->position.sequence);
+                        if (message 
+                            && message->message.id != position.pending->messageId) {
+                            throw std::runtime_error("Сообщение recovery не совпадает с сохранённой выдачей");
+                        }
+
+                        // письмо могло истечь по TTL или быть удалено другим потребителем с WithAck QoS после ack
+                        if (!message) {
+                            position.confirmed = position.pending->position;
+                            position.pending.reset();
+
+                            recovery.save(queue, state.recoveryClientId, position);
+                        }
+                    }
+
+                    if (!message && !position.pending) {
+                        RecoveryPosition next; // здесь буду собирать позицию нового найденного письма
+
+                        if (queue.order() == QueueOrder::Sorted) {
+                            // взял последнюю позицию чтения
+                            const auto result = queue.findNextSortedMessage(position.confirmed.sorted);
+                            if (result) {
+                                message = result->item;
+                                next.sequence = result->position.sequence;
+                                next.sorted = result->position;
+                            }
+                        } else {
+                            // order: fifo/unordered
+                            message = queue.findNextMessageAfter(position.confirmed.sequence);
+                            if (message) {
+                                next.sequence = message->sequence;
+                            }
+                        }
+
+                        // если нашел новое письмо - создал pending
+                        if (message) {
+                            position.pending = RecoveryPending{message->message.id, std::move(next)};
+                            
+                            // сохраняет состояние с новой неподтвержденной выдачей до отправки ответа
+                            recovery.save(queue, state.recoveryClientId, position);
+                        }
+                    }
+
+                    if (message) {
+                        deliveryQueue = &queue;
+
+                        reply.type = MsgType::Deliver;
+                        reply.msgId = message->message.id;
+                        reply.producerId = message->message.producerId;
+                        reply.payload = message->message.payload;
+                    } else {
+                        reply.type = MsgType::NoMessage;
+                    }
                 } else {
-                    throw std::runtime_error("Получение с recovery пока не поддерживается");
+                    throw std::runtime_error("Неизвестный QoS потребителя");
                 }
             } else if (envelope.type == MsgType::Ack) {
-                if (envelope.queue.empty() || envelope.msgId.empty() || envelope.deliveryAttemptId.empty()) {
-                    throw std::runtime_error("Для ack требуются queue, msg_id и delivery_attempt_id");
+                if (envelope.queue.empty() || envelope.msgId.empty()) {
+                    throw std::runtime_error("Для ack требуются queue и msg_id");
                 }
 
                 Queue& queue = queues.get(envelope.queue);
-                
-                /*
-                в очереди ищется письмо в котором: 
-                    id письма совпал
-                    есть активная выдача
-                    identity клиента совпал
-                    id попытки выдачи совпал
-                пример: "клиент 1 подтверждает msg_id=10, attempt=5" -> из очереди в брокере удаляется соответсвующее письмо 
-                */
-                if (!queue.confirmDeliveryAndRemoveMessage(client_id, envelope.msgId, envelope.deliveryAttemptId)) {
-                    // просроченное, повторное или чужое подтверждение ничего не меняет
-                    Logger::log("Подтверждение проигнорировано: выдача сообщения не найдена или истекло время подтверждения");
-                    continue;
+                auto clientSubscriptions = subscriptions.find(client_id);
+                Subscription* recoverySubscription = nullptr;
+                if (clientSubscriptions != subscriptions.end()) {
+                    auto subscription = clientSubscriptions->second.find(envelope.queue);
+                    if (subscription != clientSubscriptions->second.end()
+                        && subscription->second.qos == ConsumerQos::Recovery) {
+                        recoverySubscription = &subscription->second;
+                    }
                 }
-                reply.queue = envelope.queue;
-                reply.msgId = envelope.msgId;
-                reply.payload = "обработка подтверждена";
 
-                Logger::log("Сообщение #" + envelope.msgId + " подтверждено и удалено из очереди " + envelope.queue);
+                if (recoverySubscription) {
+                    const auto& consumerId = recoverySubscription->recoveryClientId;
+                    auto position = recovery.load(queue, consumerId); // состояние для восстановления у конкретного потребителя + очереди
+                    if (!position.pending || position.pending->messageId != envelope.msgId) {
+                        Logger::log("Подтверждение recovery проигнорировано: выдача не найдена");
+                        continue;
+                    }
+                    position.confirmed = position.pending->position;
+                    position.pending.reset();
+                    recovery.save(queue, consumerId, position);
+                    reply.queue = envelope.queue;
+                    reply.msgId = envelope.msgId;
+                    reply.payload = "Позиция чтения сохранена";
+
+                    Logger::log("Позиция recovery сохранена: клиент=" + consumerId + ", очередь=" + envelope.queue);
+                } else {
+                    // для WithAck должны совпасть id письма, identity клиента и id активной попытки
+                    if (envelope.deliveryAttemptId.empty()) {
+                        throw std::runtime_error("Для with_ack требуется delivery_attempt_id");
+                    }
+                    if (!queue.confirmDeliveryAndRemoveMessage(client_id, envelope.msgId, envelope.deliveryAttemptId)) {
+                        Logger::log("Подтверждение проигнорировано: выдача сообщения не найдена или истекло время подтверждения");
+                        continue;
+                    }
+                    reply.queue = envelope.queue;
+                    reply.msgId = envelope.msgId;
+                    reply.payload = "обработка подтверждена";
+
+                    Logger::log("Сообщение #" + envelope.msgId + " подтверждено и удалено из очереди " + envelope.queue);
+                }
             } else if (envelope.type == MsgType::Unsubscribe) {
                 /* пример сообщения отписки от очереди:
                 {"type": "unsubscribe", "queue": "HighPriorityQueue"}

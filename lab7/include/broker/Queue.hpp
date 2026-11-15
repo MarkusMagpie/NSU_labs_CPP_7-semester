@@ -109,11 +109,14 @@ public:
 
     const std::string& name() const;
     QueueOrder order() const;
+    const std::optional<std::filesystem::path>& diskDirectory() const;
 
     void push(Message message);
 
     // 1 доступное сообщение с номером больше lastSequence; 0 означает начало
     std::optional<SequencedMessage> findNextMessageAfter(std::uint64_t lastSequence);
+    // для повторной выдачи recovery qos: найти запись по ее номеру
+    std::optional<SequencedMessage> findMessageBySequence(std::uint64_t sequence);
 
     // найти минимальную пару (key, sequence) после позиции
     std::optional<SortedReadResult> findNextSortedMessage(const std::optional<SortedReadPosition>& lastPosition);

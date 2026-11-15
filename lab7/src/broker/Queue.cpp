@@ -162,6 +162,10 @@ QueueOrder Queue::order() const {
     return order_;
 }
 
+const std::optional<std::filesystem::path>& Queue::diskDirectory() const {
+    return diskDir_;
+}
+
 // -1: left < right; 0: равны; 1: left > right
 int Queue::compareIntegerSortValues(const nlohmann::json& left, const nlohmann::json& right) {
     if (!left.is_number_integer() || !right.is_number_integer()) {
@@ -299,6 +303,19 @@ std::optional<SequencedMessage> Queue::findNextMessageAfter(std::uint64_t lastSe
 
     return it->item;
 }
+
+std::optional<SequencedMessage> Queue::findMessageBySequence(std::uint64_t sequence) {
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
+
+    removeExpiredMessagesLocked(std::chrono::steady_clock::now());
+    
+    const auto it = std::find_if(messages_.begin(), messages_.end(), [sequence](const Entry& entry) {
+        return entry.item.sequence == sequence;
+    });
+    if (it == messages_.end()) return std::nullopt;
+
+    return it->item;
+} // mutex.unlock()
 
 // (для потребителя с NoAck QoS и sorted order)
 std::optional<SortedReadResult> Queue::findNextSortedMessage(const std::optional<SortedReadPosition>& lastPosition) {
