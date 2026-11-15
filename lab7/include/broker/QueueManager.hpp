@@ -13,7 +13,6 @@
 class QueueManager {
 private:
     std::map<std::string, std::unique_ptr<Queue>> queues_;
-    std::map<std::string, std::string> unsupported_;
 
     std::optional<std::filesystem::path> counterPath_;
     std::uint64_t nextMessageId_ = 1;

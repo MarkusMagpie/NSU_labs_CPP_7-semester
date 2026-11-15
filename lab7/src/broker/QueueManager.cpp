@@ -42,7 +42,7 @@ QueueManager::QueueManager(const std::vector<QueueConfig>& configs, const std::f
 
     for (const QueueConfig& config : configs) {
         // 1 проверить что имя не пустое и не повторяется
-        if (config.name.empty() || queues_.count(config.name) || unsupported_.count(config.name)) {
+        if (config.name.empty() || queues_.count(config.name)) {
             throw std::runtime_error("Пустое или повторное имя очереди: " + config.name);
         }
 
@@ -52,9 +52,9 @@ QueueManager::QueueManager(const std::vector<QueueConfig>& configs, const std::f
 
         if ((config.durability != "memory" && config.durability != "disk")
             || (config.order != "fifo" && config.order != "unordered" && config.order != "sorted")) {
-            unsupported_.emplace(config.name, "поддерживаются memory/disk и fifo/unordered/sorted");
-            Logger::log("Очередь " + config.name + " недоступна");
-            continue;
+            throw std::runtime_error("Некорректные настройки очереди " 
+                + config.name
+                + ": поддерживаются memory/disk и fifo/unordered/sorted");
         }
 
         // 2 создать объект очереди и положить в мапу
@@ -113,11 +113,6 @@ Queue& QueueManager::get(const std::string& name) {
         return *queue->second;
     }
 
-    auto unsupported = unsupported_.find(name);
-    if (unsupported != unsupported_.end()) {
-        throw std::runtime_error("Очередь " + name + " недоступна: " + unsupported->second);
-    }
-    
     throw std::runtime_error("Неизвестная очередь: " + name);
 }
 

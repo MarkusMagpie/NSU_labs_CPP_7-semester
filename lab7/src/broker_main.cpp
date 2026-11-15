@@ -34,10 +34,11 @@ int main(int argc, char* argv[]) {
         Logger::log(line);
     }
 
+    // 1.1 - проход по полученным настройкам очередей и создание объектов очередей (queues_)
     QueueManager queues(config.queues, config.dataDir);
     RecoveryStore recovery;
 
-    // 2 - ZeroMQ привязь сокета на адрес из yaml конфига 
+    // 2 - ZeroMQ привязь сокета на адрес прочитанного из yaml конфига 
     zmq::context_t context(1);
     zmq::socket_t router(context, zmq::socket_type::router);
     router.bind(config.bind); // сокет router привязывается к адресу в переменной bind
@@ -87,7 +88,7 @@ int main(int argc, char* argv[]) {
 
         bool more = identity.more(); // есть ли ещё фреймы после только что полученного
         int parts = 0; // сколько фреймов содержимого получил
-        std::string body; // для хранения фрейма с json 
+        std::string body; // в этой строке хранится json фрейм после identity 
         while (more) {
             zmq::message_t part;
             if (!router.recv(part, zmq::recv_flags::none)) {
@@ -140,7 +141,7 @@ int main(int argc, char* argv[]) {
                     throw std::runtime_error("Для declare_producer требуется producer_qos");
                 }
 
-                producers.insert_or_assign(client_id, *envelope.producerQos);
+                producers.insert_or_assign(client_id, *envelope.producerQos); // брокер записывает QoS производителя в память
                 reply.payload = "Производитель зарегистрирован";
             } else if (envelope.type == MsgType::Subscribe) {
                 /* пример сообщения подписки на очередь: 
@@ -427,7 +428,12 @@ int main(int argc, char* argv[]) {
                 reply.payload = "Подписка отменена";
             } else if (envelope.type == MsgType::Produce) {
                 /* пример сообщения о новом сообщении от производителя брокеру:
-                {"type":"produce","queue":"MemoryFifoQueue","producer_id":"producer-1","payload":"привет"}
+                {
+                    "type":"produce",
+                    "queue":"MemoryFifoQueue",
+                    "producer_id":"producer-1",
+                    "payload":"привет"
+                }
                 */
                 const auto producer = producers.find(client_id);
                 if (producer == producers.end()) {
@@ -443,7 +449,7 @@ int main(int argc, char* argv[]) {
                     throw std::runtime_error("Для produce требуются queue и producer_id");
                 }
 
-                // найти очередь в брокере по ее названию в письме
+                // поиск очереди в брокере по ее названию в сообщении
                 Queue& queue = queues.get(envelope.queue);
 
                 Message message{
@@ -454,13 +460,13 @@ int main(int argc, char* argv[]) {
                 reply.msgId = message.id;
                 reply.queue = envelope.queue;
 
-                queue.push(std::move(message)); // запись письма в конец очереди
+                // запись письма в конец очереди
+                queue.push(std::move(message));
 
                 Logger::log("Сообщение #" + reply.msgId + " добавлено в очередь " + envelope.queue);
                 reply.payload = "Сообщение добавлено в очередь";
             } else {
-                throw std::runtime_error("Тип сообщения пока не поддерживается: "
-                    + Envelope::typeToString(envelope.type));
+                throw std::runtime_error("Тип сообщения не поддерживается: " + Envelope::typeToString(envelope.type));
             }
         } catch (const std::exception& error) {
             if (claimedQueue) {

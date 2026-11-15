@@ -68,6 +68,7 @@ add_library(lab7_broker_core STATIC
   src/broker/Queue.cpp
   src/broker/QueueManager.cpp
   src/broker/DiskStorage.cpp
+  src/broker/RecoveryStore.cpp
 )
 target_include_directories(lab7_broker_core PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -123,20 +124,12 @@ install(FILES
   DESTINATION ${LAB7_CMAKE_INSTALL_DIR}
 )
 
-# проверка 1 связи с брокером
-# add_executable(test_client src/test_client.cpp)
-# target_link_libraries(test_client PRIVATE lab7_client lab7_protocol)
+# сценарий 1 - пример producer -> очередь -> consumer
+add_executable(hello_scenario EXCLUDE_FROM_ALL src/scenarios/hello_scenario.cpp)
+target_link_libraries(hello_scenario PRIVATE lab7_client lab7_protocol)
 
-# проверка 2 сценария 1 производитель и 2 потребителя с получением ими сообщений 
-# add_executable(m2_scenario src/m2_scenario.cpp)
-# target_link_libraries(m2_scenario PRIVATE lab7_client lab7_protocol)
-
-# проверка 3 выдачи sorted-очереди потребителям with_ack
-# add_executable(m4_with_ack_scenario src/m4_with_ack_scenario.cpp)
-# target_link_libraries(m4_with_ack_scenario PRIVATE lab7_client lab7_protocol Threads::Threads)
-
-# восстановление дисковой очереди
-add_executable(disk_scenario EXCLUDE_FROM_ALL src/disk_scenario.cpp)
+# сценарий 2 - восстановление дисковой очереди
+add_executable(disk_scenario EXCLUDE_FROM_ALL src/scenarios/disk_scenario.cpp)
 target_link_libraries(disk_scenario PRIVATE lab7_client lab7_protocol)
 
 if(BUILD_BROKER)

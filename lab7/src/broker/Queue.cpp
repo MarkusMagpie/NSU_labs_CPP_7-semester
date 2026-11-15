@@ -221,7 +221,7 @@ void Queue::push(Message message) {
         throw std::overflow_error("Исчерпаны порядковые номера очереди: " + name_);
     }
 
-    // поиск в payload сообщения значения поля sort_key 
+    // (order: "sorted") поиск в payload сообщения значения поля sort_key 
     std::optional<nlohmann::json> sortValue;
     if (order_ == QueueOrder::Sorted) {
         const auto field = message.payload.find(sortKey_);
@@ -254,7 +254,7 @@ void Queue::push(Message message) {
         Entry{
             SequencedMessage{sequence, std::move(message)},
             std::nullopt, // сообщение еще никому не выдано
-            expiresAt,
+            expiresAt, // время когда TTL сообщения очереди истечет
             std::move(sortValue)
         }
     );
