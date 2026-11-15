@@ -132,6 +132,10 @@ target_link_libraries(hello_scenario PRIVATE lab7_client lab7_protocol)
 add_executable(disk_scenario EXCLUDE_FROM_ALL src/scenarios/disk_scenario.cpp)
 target_link_libraries(disk_scenario PRIVATE lab7_client lab7_protocol)
 
+# сценарий из ТЗ: График датчика температуры за последний день
+add_executable(temperature_scenario EXCLUDE_FROM_ALL src/scenarios/temperature_scenario.cpp)
+target_link_libraries(temperature_scenario PRIVATE lab7_client lab7_protocol)
+
 if(BUILD_BROKER)
 add_executable(broker src/broker_main.cpp)
 target_link_libraries(broker PRIVATE

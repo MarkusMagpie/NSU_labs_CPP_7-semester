@@ -1,0 +1,9 @@
+broker:
+  bind: "tcp://127.0.0.1:5569"
+
+queues:
+  - name: "TemperatureQueue"
+    durability: "memory"
+    order: "sorted"
+    sort_key: "timestamp"
+    message_ttl: 86400

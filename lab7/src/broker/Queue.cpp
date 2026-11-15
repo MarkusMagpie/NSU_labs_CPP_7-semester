@@ -110,6 +110,7 @@ void Queue::restoreFromDisk() {
 
                 const auto systemNow = std::chrono::system_clock::now();
                 
+                // в ходе проверки выяснилось что сообщение в очереди просрочено
                 if (expiry <= systemNow) {
                     removeDiskMessage(sequence);
                     continue;
@@ -319,11 +320,7 @@ std::optional<SequencedMessage> Queue::findMessageBySequence(std::uint64_t seque
 
 // (для потребителя с NoAck QoS и sorted order)
 std::optional<SortedReadResult> Queue::findNextSortedMessage(const std::optional<SortedReadPosition>& lastPosition) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    // if (order_ != QueueOrder::Sorted) {
-    //     throw std::logic_error("Сортированное чтение доступно только для sorted-очереди");
-    // }
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
 
     if (lastPosition && !lastPosition->sortValue.is_number_integer()) {
         throw std::invalid_argument("Позиция сортированного чтения должна содержать целый ключ");
@@ -361,7 +358,7 @@ std::optional<SortedReadResult> Queue::findNextSortedMessage(const std::optional
             best->item.sequence /*sequence*/
         }
     };
-}
+} // mutex.unlock()
 
 // (для потребителя с WithAck QoS) выбирает сообщение из очереди и закрепляет его за указанным потребителем по clientId
 std::optional<Delivery> Queue::reserveNextMessageForAck(const std::string& clientId, 
