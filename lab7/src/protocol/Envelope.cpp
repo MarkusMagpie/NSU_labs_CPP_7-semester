@@ -30,9 +30,7 @@ const char* producerQosName(ProducerQos qos) {
 }
 
 ProducerQos parseProducerQos(const std::string& value) {
-    if (value == "none") {
-        return ProducerQos::None;
-    }
+    if (value == "none") return ProducerQos::None;
     if (value == "broker_ack") return ProducerQos::BrokerAck;
     if (value == "consumer_ack") return ProducerQos::ConsumerAck;
     

@@ -47,27 +47,27 @@ int main(int argc, char* argv[]) {
     // настройки подписки очереди
     struct Subscription {
         ConsumerQos qos; // QoS потребителя
-        std::optional<int> ackTimeoutMs; // таймаут подтверждения получения сообщения 
+        std::optional<int> ackTimeoutMs; // (WithAck QoS) таймаут ack получения сообщения
 
         /*--- брокер запоминает что он уже прочитал у каждого подписчика ---*/
-        // fifo/unordered order - sequence последнего выданного сообщения
+        // order: fifo/unordered - sequence последнего выданного сообщения
         std::uint64_t lastSequence = 0;
-        // sorted order - (key, sequence) последнего выданного сообщения; nullopt - чтение не начиналось
+        // order: sorted - (key, sequence) последнего выданного сообщения; nullopt - чтение не начиналось
         std::optional<SortedReadPosition> lastSortedPosition;
         std::string recoveryClientId; // постоянный client_id для Recovery QoS
         /*------------------------------------------------------------------*/
     };
 
-    // id клиента -> QoS производителя (пополняется declare_producer)
+    // router identity клиента -> QoS производителя (пополняется declare_producer)
     std::map<std::string, ProducerQos> producers;
-    // id клиента -> имя очереди -> настройки подписки очереди 
+    // router identity клиента -> имя очереди -> настройки подписки очереди 
     std::map<std::string, std::map<std::string, Subscription>> subscriptions;
 
     // 3 - ROUTER получает идентификатор клиента + 1 фрейм с JSON
     while (true) {
         // удалить собщения у которых истек ттл
         queues.removeExpiredMessages();
-        // у оставшихся сообщений освободить истекшие попытки подтверждения выдачи сообщений от WithAck потребителей
+        // у оставшихся сообщений освободить истекшие попытки ack выдачи сообщений от WithAck потребителей
         queues.releaseExpiredDeliveries();
 
         // объект для ожидания событи: слежка за сокетом router и событием ZMQ_POLLIN - возможность читать входящие данные
@@ -126,7 +126,7 @@ int main(int argc, char* argv[]) {
         std::optional<SortedReadPosition> deliveredSortedPosition;
         /*-------------------------------------------------------------------------------------------------------------------------*/
         
-        /* указатель на очередь в которой брокер в текущей итерации обработал запрос receive от потребителя WithAck */
+        /* указатель на очередь в которой брокер в текущей итерации обработал запрос receive от потребителя с WithAck QoS */
         Queue* claimedQueue = nullptr;
         Queue* deliveryQueue = nullptr;
         const std::string client_id = identity.to_string();
@@ -141,11 +141,17 @@ int main(int argc, char* argv[]) {
                     throw std::runtime_error("Для declare_producer требуется producer_qos");
                 }
 
-                producers.insert_or_assign(client_id, *envelope.producerQos); // брокер записывает QoS производителя в память
+                // брокер запоминает QoS производителя
+                producers.insert_or_assign(client_id, *envelope.producerQos);
                 reply.payload = "Производитель зарегистрирован";
             } else if (envelope.type == MsgType::Subscribe) {
                 /* пример сообщения подписки на очередь: 
-                {"type": "subscribe", "queue": "HighPriorityQueue", "consumer_qos": "with_ack", "ack_timeout_ms": 5000} 
+                    {
+                        "type": "subscribe", 
+                        "queue": "HighPriorityQueue", 
+                        "consumer_qos": "with_ack", 
+                        "ack_timeout_ms": 5000
+                    } 
                 */
                 if (envelope.queue.empty() || !envelope.consumerQos) {
                     throw std::runtime_error("Для subscribe требуются queue и consumer_qos");
@@ -154,7 +160,6 @@ int main(int argc, char* argv[]) {
                 // подписка возможна только на очередь поддерживаемую на текущем этапе разработки
                 queues.get(envelope.queue);
 
-                // по ТЗ потребитель с подтверждением задает период ожидания подтверждения при подписке
                 if (*envelope.consumerQos == ConsumerQos::WithAck
                     && (!envelope.ackTimeoutMs || *envelope.ackTimeoutMs <= 0)) {
                     throw std::runtime_error("Для with_ack QoS требуется положительный ack_timeout_ms");
@@ -165,7 +170,7 @@ int main(int argc, char* argv[]) {
                         throw std::runtime_error("Для recovery требуется постоянный client_id");
                     }
 
-                    // если есть то загрузка сохраненного состояния пары очередь + клиент
+                    // загрузка сохраненного состояния пары очередь + клиент
                     recovery.load(queues.get(envelope.queue), envelope.clientId);
 
                     // новое соединение заменяет старую подписку с тем же (client_id, очередь)
@@ -185,7 +190,7 @@ int main(int argc, char* argv[]) {
                 // повторная подписка отменяет старые выдачи этого клиента в очереди
                 queues.get(envelope.queue).releaseAllDeliveriesForClient(client_id);
                 
-                // сохранение подписки
+                // сохранение подписки в брокере
                 subscriptions[client_id].insert_or_assign(envelope.queue,
                     Subscription{
                         *envelope.consumerQos, 
@@ -199,18 +204,22 @@ int main(int argc, char* argv[]) {
                 reply.queue = envelope.queue;
                 reply.payload = "Подписка зарегистрирована";
             } else if (envelope.type == MsgType::Receive) {
-                /* пример сообщения потребителя брокеру для получения письма
-                {"type": "receive", "queue": "MemoryFifoQueue"}
+                /* пример сообщения потребителя брокеру для получения письма:
+                {
+                    "type": "receive", 
+                    "queue": "MemoryFifoQueue"
+                }
                 */
                 if (envelope.queue.empty()) {
                     throw std::runtime_error("Для receive требуется queue");
                 }
 
-                // проверка имени очереди и подписки у клиента
+                // по ROUTER identity находит клиента
                 auto clientSubscriptions = subscriptions.find(client_id);
                 if (clientSubscriptions == subscriptions.end()) {
                     throw std::runtime_error("Клиент не подписан на очередь: " + envelope.queue);
                 }
+                // по имени очереди находит подписку
                 auto subscription = clientSubscriptions->second.find(envelope.queue);
                 if (subscription == clientSubscriptions->second.end()) {
                     throw std::runtime_error("Клиент не подписан на очередь: " + envelope.queue);
@@ -220,10 +229,9 @@ int main(int argc, char* argv[]) {
                 Queue& queue = queues.get(envelope.queue);
                 reply.queue = envelope.queue;
 
-                // получение письма варьируется от QoS потребителя
                 if (state.qos == ConsumerQos::NoAck) {
                     if (queue.order() == QueueOrder::Sorted) {
-                        // sorted выбор следующего письма по (key, sequence)
+                        // order: sorted выбирает следующее письмо по (key, sequence)
                         auto result = queue.findNextSortedMessage(state.lastSortedPosition);
                         if (result) {
                             deliveryQueue = &queue;
@@ -234,12 +242,12 @@ int main(int argc, char* argv[]) {
 
                             // эту позицию конкретного подписчика нужно будет обновить после отправки ему письма 
                             sortedCursorToAdvance = &state.lastSortedPosition;
-                            deliveredSortedPosition = std::move(result->position); // {key=sortValue = 10, sequence = 3}
+                            deliveredSortedPosition = std::move(result->position); // пример: {key=sortValue = 10, sequence = 3}
                         } else {
                             reply.type = MsgType::NoMessage;
                         }
                     } else {
-                        // fifo/unordered выбирают следующее письмо читая только sequence
+                        // order: fifo/unordered выбирают следующее письмо читая только ключ sequence
                         std::optional<SequencedMessage> message = queue.findNextMessageAfter(state.lastSequence);
                         if (message) {
                             deliveryQueue = &queue;
@@ -262,22 +270,21 @@ int main(int argc, char* argv[]) {
                         std::chrono::milliseconds(*state.ackTimeoutMs), // сколько ждать ack
                         state.lastSortedPosition // какой (key, sequence) этот подписчик видел последним
                     );
+
                     if (delivery) {
-                        /*
-                        пример ответа: 
-                        {
-                        "type": "deliver", 
-                        "queue": "MemoryFifoQueue", 
-                        "msg_id": "10", 
-                        "delivery_attempt_id": "5", 
-                        "producer_id": "producer-1", 
-                        "payload": "ляляля"
-                        }
-                        */
-                        
                         claimedQueue = &queue;
                         deliveryQueue = &queue;
 
+                        /* пример ответа: 
+                            {
+                                "type": "deliver", 
+                                "queue": "MemoryFifoQueue", 
+                                "msg_id": "10", 
+                                "delivery_attempt_id": "5", 
+                                "producer_id": "producer-1", 
+                                "payload": "ляляля"
+                            }
+                        */
                         reply.type = MsgType::Deliver;
                         reply.msgId = delivery->message.id;
                         reply.deliveryAttemptId = delivery->deliveryAttemptId;
@@ -298,13 +305,13 @@ int main(int argc, char* argv[]) {
                     auto position = recovery.load(queue, state.recoveryClientId);
                     std::optional<SequencedMessage> message;
 
-                    // у потребителя есть неподтвержденное сообщение
+                    // у потребителя есть неподтвержденное сообщение?
                     if (position.pending) {
-                        // попытка снова найти это неподтвержденное письмо по sequence
+                        // попытка снова найти это неподтвержденное письмо по ключу sequence
+                        // если найду то брокер выдаст его же повторно
                         message = queue.findMessageBySequence(position.pending->position.sequence);
-                        if (message 
-                            && message->message.id != position.pending->messageId) {
-                            throw std::runtime_error("Сообщение recovery не совпадает с сохранённой выдачей");
+                        if (message && message->message.id != position.pending->messageId) {
+                            throw std::runtime_error("Сообщение recovery не совпадает с сохраненной выдачей");
                         }
 
                         // письмо могло истечь по TTL или быть удалено другим потребителем с WithAck QoS после ack
@@ -320,7 +327,6 @@ int main(int argc, char* argv[]) {
                         RecoveryPosition next; // здесь буду собирать позицию нового найденного письма
 
                         if (queue.order() == QueueOrder::Sorted) {
-                            // взял последнюю позицию чтения
                             const auto result = queue.findNextSortedMessage(position.confirmed.sorted);
                             if (result) {
                                 message = result->item;
@@ -335,11 +341,11 @@ int main(int argc, char* argv[]) {
                             }
                         }
 
-                        // если нашел новое письмо - создал pending
+                        // нашел новое письмо сохраняю его в (queue, client_id) как pending
                         if (message) {
                             position.pending = RecoveryPending{message->message.id, std::move(next)};
                             
-                            // сохраняет состояние с новой неподтвержденной выдачей до отправки ответа
+                            // сохраняет состояние с новой неподтвержденной выдачей
                             recovery.save(queue, state.recoveryClientId, position);
                         }
                     }
@@ -358,6 +364,14 @@ int main(int argc, char* argv[]) {
                     throw std::runtime_error("Неизвестный QoS потребителя");
                 }
             } else if (envelope.type == MsgType::Ack) {
+                /* пример сообщения отправляемого потребителем брокеру:
+                    {
+                    "type": "ack",
+                    "queue": "Orders",
+                    "msg_id": "1",
+                    "delivery_attempt_id": "5"
+                    }
+                */
                 if (envelope.queue.empty() || envelope.msgId.empty()) {
                     throw std::runtime_error("Для ack требуются queue и msg_id");
                 }
@@ -367,22 +381,24 @@ int main(int argc, char* argv[]) {
                 Subscription* recoverySubscription = nullptr;
                 if (clientSubscriptions != subscriptions.end()) {
                     auto subscription = clientSubscriptions->second.find(envelope.queue);
-                    if (subscription != clientSubscriptions->second.end()
-                        && subscription->second.qos == ConsumerQos::Recovery) {
+                    if (subscription != clientSubscriptions->second.end() && subscription->second.qos == ConsumerQos::Recovery) {
                         recoverySubscription = &subscription->second;
                     }
                 }
 
                 if (recoverySubscription) {
+                    // сообщение НЕ удаляется из очереди (в отличие от WithAck)
                     const auto& consumerId = recoverySubscription->recoveryClientId;
                     auto position = recovery.load(queue, consumerId); // состояние для восстановления у конкретного потребителя + очереди
                     if (!position.pending || position.pending->messageId != envelope.msgId) {
                         Logger::log("Подтверждение recovery проигнорировано: выдача не найдена");
                         continue;
                     }
+                    
                     position.confirmed = position.pending->position;
                     position.pending.reset();
                     recovery.save(queue, consumerId, position);
+
                     reply.queue = envelope.queue;
                     reply.msgId = envelope.msgId;
                     reply.payload = "Позиция чтения сохранена";
@@ -393,6 +409,8 @@ int main(int argc, char* argv[]) {
                     if (envelope.deliveryAttemptId.empty()) {
                         throw std::runtime_error("Для with_ack требуется delivery_attempt_id");
                     }
+
+                    // удаление письма из очереди
                     if (!queue.confirmDeliveryAndRemoveMessage(client_id, envelope.msgId, envelope.deliveryAttemptId)) {
                         Logger::log("Подтверждение проигнорировано: выдача сообщения не найдена или истекло время подтверждения");
                         continue;
@@ -435,18 +453,20 @@ int main(int argc, char* argv[]) {
                     "payload":"привет"
                 }
                 */
-                const auto producer = producers.find(client_id);
+                const auto producer = producers.find(client_id); // qos производителя
                 if (producer == producers.end()) {
                     throw std::runtime_error("Сначала необходимо объявить производителя");
                 }
 
-                // для qos без подтверждения не посылаю ответ на produce, даже при ошибке
+                // для qos: none добавляю сообщение в очередь НО не посылаю ответ производителю
                 sendReply = producer->second != ProducerQos::None;
-                if (producer->second == ProducerQos::ConsumerAck) {
-                    throw std::runtime_error("QoS consumer_ack пока не поддерживается для produce");
-                }
+                
+                // if (producer->second == ProducerQos::ConsumerAck) {
+                //     throw std::runtime_error("QoS consumer_ack не поддерживается для produce");
+                // }
+                
                 if (envelope.queue.empty() || envelope.producerId.empty()) {
-                    throw std::runtime_error("Для produce требуются queue и producer_id");
+                    throw std::runtime_error("Для \"produce\" требуются queue и producer_id");
                 }
 
                 // поиск очереди в брокере по ее названию в сообщении
@@ -460,7 +480,7 @@ int main(int argc, char* argv[]) {
                 reply.msgId = message.id;
                 reply.queue = envelope.queue;
 
-                // запись письма в конец очереди
+                // запись письма в конец указанной в письме очереди в брокере
                 queue.push(std::move(message));
 
                 Logger::log("Сообщение #" + reply.msgId + " добавлено в очередь " + envelope.queue);
@@ -515,11 +535,11 @@ int main(int argc, char* argv[]) {
         }
 
         /* --- ПОСЛЕ ПЕРЕДАЧИ БРОКЕРОМ ОТВЕТА ОБНОВЛЯЮ ПОЗИЦИЮ ПОТРЕБИТЕЛЯ В ОЧЕРЕДИ --- */
-        // fifo/unordered
+        // order: fifo/unordered
         if (cursorToAdvance) {
             *cursorToAdvance = deliveredSequence;
         }
-        // sorted
+        // order: sorted
         if (sortedCursorToAdvance) {
             // изменение subscriptions[этот клиент][эта очередь].lastSortedPosition
             *sortedCursorToAdvance = std::move(deliveredSortedPosition);

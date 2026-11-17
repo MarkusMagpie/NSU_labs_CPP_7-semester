@@ -54,8 +54,8 @@ private:
     // запись в очереди   
     struct Entry {
         SequencedMessage item; // сообщение + его порядковый номер в очереди
-        // active = nullopt -> письмо доступно для выдачи потребителю с WithAck
-        // active заполнено -> письмо выдано и ожидает подтверждения потребителем с withack
+        // active = nullopt -> письмо доступно для выдачи потребителю с WithAck QoS
+        // active заполнено -> письмо выдано и ожидает подтверждения потребителем с WithAck QoS
         std::optional<ActiveDelivery> active; // информация о выдаче
         std::optional<std::chrono::steady_clock::time_point> expiresAt; // момент истечения TTL = момент когда сообщение перестает жить в очереди
         std::optional<nlohmann::json> sortValue; // целое знаковое или беззнаковое значение sortKey (key)

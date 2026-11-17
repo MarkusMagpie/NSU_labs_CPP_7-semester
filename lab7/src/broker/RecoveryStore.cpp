@@ -72,7 +72,7 @@ RecoveryState RecoveryStore::load(const Queue& queue, const std::string& consume
     }
 
     RecoveryState state;
-    // если очередь дисковая и состояние еще не загружено -> пытается прочитать файл
+    // если очередь durability: disk и состояние еще не загружено -> прочитать файл
     if (queue.diskDirectory()) {
         const auto path = statePath(queue, consumerId);
         if (std::filesystem::exists(path)) {
@@ -118,7 +118,7 @@ RecoveryState RecoveryStore::load(const Queue& queue, const std::string& consume
 }
 
 void RecoveryStore::save(const Queue& queue, const std::string& consumerId, const RecoveryState& state) {
-    // для очереди с disk durability
+    // для очереди с durability: disk
     if (queue.diskDirectory()) {
         // в data/Orders/recovery/ появится файл типа 7265616465722d31.json
         const auto path = statePath(queue, consumerId);
@@ -150,6 +150,6 @@ void RecoveryStore::save(const Queue& queue, const std::string& consumerId, cons
             });
     }
 
-    // для очереди с memory durability - обновление состояния в памяти
+    // для очереди с durability: memory - обновление состояния в памяти
     states_.insert_or_assign(std::make_pair(queue.name(), consumerId), state);
 }

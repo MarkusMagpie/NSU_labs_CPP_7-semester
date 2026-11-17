@@ -23,7 +23,7 @@ struct RecoveryPending {
 // состояние для пары client_id потребителя + очередь
 struct RecoveryState {
     RecoveryPosition confirmed; // last acke-ed position
-    std::optional<RecoveryPending> pending; // выданное брокером но не ack-ed position
+    std::optional<RecoveryPending> pending; // выданное брокером но еще не ack-ed position
 };
 
 /*
@@ -47,11 +47,11 @@ public:
     RecoveryState load(const Queue& queue, const std::string& consumerId);
     void save(const Queue& queue, const std::string& consumerId, const RecoveryState& state);
 private:
-/*
-{"Orders", "reader-1"} -> RecoveryState
-{"Orders", "reader-2"} -> другое RecoveryState
-{"Logs", "reader-1"} -> еще RecoveryState
-*/
+    /*
+    {"Orders", "reader-1"} -> RecoveryState
+    {"Orders", "reader-2"} -> другое RecoveryState
+    {"Logs", "reader-1"} -> еще RecoveryState
+    */
     std::map<
         std::pair<std::string, std::string>, // {имя очереди, client_id}
         RecoveryState

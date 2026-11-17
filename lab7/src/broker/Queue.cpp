@@ -260,6 +260,7 @@ void Queue::push(Message message) {
         }
     );
 
+    // (durability: disk) через DiskStorage::writeJson() выполняется запись в директорию diskDir_: sequence.json 
     if (diskDir_) {
         const Entry& entry = messages_.back();
         const auto path = *diskDir_ / (std::to_string(entry.item.sequence) + ".json");
@@ -287,21 +288,23 @@ void Queue::push(Message message) {
 std::optional<SequencedMessage> Queue::findNextMessageAfter(std::uint64_t lastSequence) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (order_ == QueueOrder::Sorted) {
-        throw std::logic_error("Чтение sorted-очереди пока не реализовано");
-    }
-
+    // удаление истекших по TTL сообщений чтобы не мешались при поиске
     removeExpiredMessagesLocked(std::chrono::steady_clock::now());
 
-    auto it = std::upper_bound(messages_.begin(), messages_.end(), lastSequence,
+    // поиск следующего сообщения с бОльшим sequence
+    auto it = std::upper_bound(
+        messages_.begin(), 
+        messages_.end(), 
+        lastSequence,
         [](std::uint64_t sequence, const Entry& entry) {
             return sequence < entry.item.sequence;
-        });
-        
+        }
+    );    
     if (it == messages_.end()) {
         return std::nullopt;
     }
 
+    // письмо и его новая позиция
     return it->item;
 }
 
@@ -323,13 +326,13 @@ std::optional<SortedReadResult> Queue::findNextSortedMessage(const std::optional
     std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
 
     if (lastPosition && !lastPosition->sortValue.is_number_integer()) {
-        throw std::invalid_argument("Позиция сортированного чтения должна содержать целый ключ");
+        throw std::invalid_argument("Позиция сортированного чтения должна содержать целочисленный ключ");
     }
 
-    // удаление писем чей TTL истек
+    // удаление истекших по TTL сообщений чтобы не мешались при поиске
     removeExpiredMessagesLocked(std::chrono::steady_clock::now());
 
-    // ищет минимальную подходящую пару (ключ, sequence)
+    // поиск минимальной подходящей пары (ключ, sequence)
     auto best = messages_.end();
     for (auto it = messages_.begin(); it != messages_.end(); ++it) {
         if (!it->sortValue) {
@@ -360,12 +363,12 @@ std::optional<SortedReadResult> Queue::findNextSortedMessage(const std::optional
     };
 } // mutex.unlock()
 
-// (для потребителя с WithAck QoS) выбирает сообщение из очереди и закрепляет его за указанным потребителем по clientId
+// (для потребителя с WithAck QoS) выбирает сообщение из очереди брокера и закрепляет его за указанным потребителем с clientId
 std::optional<Delivery> Queue::reserveNextMessageForAck(const std::string& clientId, 
     std::chrono::milliseconds ackTimeout,
     const std::optional<SortedReadPosition>& lastSortedPosition) 
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_); // mutex.lock()
 
     if (ackTimeout <= std::chrono::milliseconds::zero()) {
         throw std::invalid_argument("Таймаут подтверждения должен быть положительным");
@@ -442,28 +445,28 @@ std::optional<Delivery> Queue::reserveNextMessageForAck(const std::string& clien
         delivery.sortedPosition = SortedReadPosition{*it->sortValue, it->item.sequence};
     }
     it->active = ActiveDelivery{
-        clientId, 
-        delivery.deliveryAttemptId,
-        // до какого момента брокер ожидает ack от потребителя
-        std::chrono::steady_clock::now() + ackTimeout // дедлайн = текущий момент + длительность ожидания подтверждения получения сообщения потребителем
+        clientId,                                       // router identity потребителя - кому брокер выдаст письмо
+        delivery.deliveryAttemptId,                     // номер попытки выдачи
+        std::chrono::steady_clock::now() + ackTimeout   // дедлайн = текущий момент + длительность ожидания подтверждения получения сообщения потребителем
     };
 
-    // 3 - теперь сообщение закреплено брокером за потребителем и выдано ему  
     return delivery;
-}
+} // mutex.unlock()
 
 // проверка ack и удаление письма из очереди
-bool Queue::confirmDeliveryAndRemoveMessage(const std::string& clientId, 
+bool Queue::confirmDeliveryAndRemoveMessage(
+    const std::string& clientId, 
     const std::string& messageId, 
     const std::string& deliveryAttemptId) 
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);                           // mutex.lock()
 
     /* пример:
     1 A выдано потребителю с WithAck
     2 у A истек ттл -> должен быть удален из очереди
     3 ack пришел на A
     */
+    // удаление истекших по TTL сообщений чтобы не мешались при поиске
     removeExpiredMessagesLocked(std::chrono::steady_clock::now());
 
     auto it = std::find_if(
@@ -472,8 +475,8 @@ bool Queue::confirmDeliveryAndRemoveMessage(const std::string& clientId,
         /*
         поиск письма в котором: 
             id письма совпал
-            есть активная выдача
-            identity клиента совпал
+            есть активная выдача (ожидание ack)
+            identity потребителя совпал
             id попытки выдачи совпал
         */
         [&](const Entry& entry) {
@@ -490,14 +493,15 @@ bool Queue::confirmDeliveryAndRemoveMessage(const std::string& clientId,
         return false;
     }
 
+    /* --- УДАЛЕНИЕ ПИСЬМА ИЗ ОЧЕРЕДИ --- */
     // удаление выбранного письма из очереди на диске
     removeDiskMessage(it->item.sequence);
-
     // удаление выбранного письма из очереди в памяти
     messages_.erase(it);
+    /* ---------------------------------- */
 
     return true;
-}
+} // mutex.unlock()
 
 std::size_t Queue::releaseExpiredDeliveriesLocked(std::chrono::steady_clock::time_point now) {
     std::size_t released = 0;
