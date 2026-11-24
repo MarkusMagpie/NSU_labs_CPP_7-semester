@@ -9,8 +9,17 @@ option(WITH_TESTS "Build unit tests (downloads Catch2 if not present)" OFF)
 message(STATUS "source directory: ${CMAKE_SOURCE_DIR}")
 message(STATUS "WITH_TESTS: ${WITH_TESTS}")
 
+set(SOURCES
+    src/main.cpp 
+    src/BankRounding.cpp 
+    src/DateTime.cpp 
+    src/Money.cpp
+)
+
 # консольное приложение моделирования банка
-add_executable(bank src/main.cpp src/BankRounding.cpp src/DateTime.cpp)
+add_executable(bank 
+    ${SOURCES}
+)
 target_include_directories(bank PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )

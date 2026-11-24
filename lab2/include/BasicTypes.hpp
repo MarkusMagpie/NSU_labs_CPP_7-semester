@@ -1,6 +1,7 @@
 #pragma once
 
 using Date = unsigned long long;
+using Money = double;
 
 struct Time {
     unsigned long long hour;
