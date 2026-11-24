@@ -14,6 +14,9 @@ set(SOURCES
     src/BankRounding.cpp 
     src/DateTime.cpp 
     src/Money.cpp
+    src/AccountTable.cpp
+    src/InputReader.cpp
+    src/Enums.cpp
 )
 
 # консольное приложение моделирования банка
