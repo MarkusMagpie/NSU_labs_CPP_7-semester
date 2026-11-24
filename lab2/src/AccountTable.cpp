@@ -1,25 +1,14 @@
 #include <AccountTable.hpp>
 
-AccountTable::AccountTable()
-    : accounts_(std::make_unique<Account[]>(capacity))
-{
-}
-
-bool AccountTable::add(const Account& account) {
-    if (size_ == capacity) {
-        return false;
-    }
-
-    accounts_[size_] = account;
-    ++size_;
-
-    return true;
+bool AccountTable::add(const Account& new_account) {
+    return accounts_.add(new_account);
 }
 
 Account* AccountTable::findById(unsigned long long id) {
-    for (std::size_t i = 0; i < size_; ++i) {
-        if (accounts_[i].id == id) {
-            return &accounts_[i];
+    for (std::size_t i = 0; i < accounts_.size(); ++i) {
+        Account* account = accounts_.get(i);
+        if (account->id == id) {
+            return account;
         }
     }
 
@@ -27,9 +16,10 @@ Account* AccountTable::findById(unsigned long long id) {
 }
 
 const Account* AccountTable::findById(unsigned long long id) const {
-    for (std::size_t i = 0; i < size_; ++i) {
-        if (accounts_[i].id == id) {
-            return &accounts_[i];
+    for (std::size_t i = 0; i < accounts_.size(); ++i) {
+        const Account* account = accounts_.get(i);
+        if (account->id == id) {
+            return account;
         }
     }
     
@@ -37,5 +27,5 @@ const Account* AccountTable::findById(unsigned long long id) const {
 }
 
 std::size_t AccountTable::size() const {
-    return size_;
+    return accounts_.size();
 }

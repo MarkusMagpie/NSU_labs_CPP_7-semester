@@ -1,19 +1,15 @@
 #pragma once
 
 #include <cstddef>
-#include <memory>
-
 #include <ComplexTypes.hpp>
+#include <Table.hpp>
 
 // таблица счетов: массив фиксированной вместимости (capacity) и число занятых элементов
 class AccountTable {
 private:
-    std::unique_ptr<Account[]> accounts_;
-    std::size_t size_ = 0; // сколько записей в таблице заполнено
+    Table<Account> accounts_;
 public:
-    static constexpr std::size_t capacity = 1e5;
-
-    AccountTable();
+    static constexpr std::size_t capacity = Table<Account>::capacity;
 
     bool add(const Account& account);
     Account* findById(unsigned long long id);

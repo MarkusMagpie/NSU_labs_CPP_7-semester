@@ -1,20 +1,16 @@
 #pragma once
 
 #include <cstddef>
-#include <memory>
-
 #include <ComplexTypes.hpp>
+#include <Table.hpp>
 
 // таблица вкладов: массив фиксированной вместимости и число занятых элементов
 class DepositTable {
 private:
-    std::unique_ptr<Deposit[]> deposits_;
-    std::size_t size_ = 0;
+    Table<Deposit> deposits_;
 
 public:
-    static constexpr std::size_t capacity = 1e5;
-
-    DepositTable();
+    static constexpr std::size_t capacity = Table<Deposit>::capacity;
 
     bool add(const Deposit& deposit);
     Deposit* findById(unsigned long long id);

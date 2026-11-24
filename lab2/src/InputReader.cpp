@@ -57,3 +57,36 @@ void readAccounts(AccountTable& accounts) {
         }
     }
 }
+
+void readDeposits(DepositTable& deposits) {
+    if (deposits.size() != 0) {
+        throw std::invalid_argument("Для чтения Deposits требуется пустая таблица");
+    }
+
+    unsigned long long count = 0;
+    if (std::scanf(" Debits %llu", &count) != 1) {
+        throw std::runtime_error("Не удалось прочитать заголовок Deposits");
+    }
+    if (count > DepositTable::capacity) {
+        throw std::runtime_error("Количество вкладов превышает вместимость таблицы Deposits");
+    }
+
+    for (unsigned long long i = 0; i < count; ++i) {
+        Deposit deposit{};
+        char typeText[100]{};
+        const int fields = std::scanf(
+            "%llu # %le # %99[a-zA-Z0-9/_ -] # %llu # %llu",
+            &deposit.id, &deposit.annualRate, typeText, &deposit.creationDate, &deposit.termDays
+        );
+        if (fields != 5) {
+            throw std::runtime_error("Не удалось прочитать запись Deposits");
+        }
+
+        trimTrailingSpaces(typeText);
+        deposit.type = parseDepositType(typeText);
+
+        if (!deposits.add(deposit)) {
+            throw std::runtime_error("Таблица вкладов Deposits заполнена");
+        }
+    }
+}
