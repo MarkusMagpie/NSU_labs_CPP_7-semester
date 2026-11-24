@@ -9,3 +9,11 @@ struct Account {
     Money balance; // Объем средств на счете
     Currency currency; // Валюта счета: RUB; YUAN; USD; EUR
 };
+
+struct Deposit {
+    unsigned long long id; // Уникальный номер вклада
+    double annualRate; // Процентная ставка (пример: 6.32 = 6.32%)
+    DepositType type; // Тип вклада
+    Date creationDate; // Дата создания вклада
+    unsigned long long termDays; // Полный срок вклада в днях
+};

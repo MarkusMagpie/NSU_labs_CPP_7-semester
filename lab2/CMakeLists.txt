@@ -15,6 +15,7 @@ set(SOURCES
     src/DateTime.cpp 
     src/Money.cpp
     src/AccountTable.cpp
+    src/DepositTable.cpp
     src/InputReader.cpp
     src/Enums.cpp
 )
