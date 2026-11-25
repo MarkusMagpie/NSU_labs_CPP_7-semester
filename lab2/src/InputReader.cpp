@@ -162,3 +162,33 @@ void readClients(ClientTable& clients) {
         }
     }
 }
+
+void readClientAccounts(ClientAccountTable& clientAccounts) {
+    if (clientAccounts.size() != 0) {
+        throw std::invalid_argument("Для чтения Client Debit требуется пустая таблица");
+    }
+
+    unsigned long long count = 0;
+    if (std::scanf(" Client Debit %llu", &count) != 1) {
+        throw std::runtime_error("Не удалось прочитать заголовок Client Debit");
+    }
+    if (count > ClientAccountTable::capacity) {
+        throw std::runtime_error("Количество счетов клиентов превышает вместимость таблицы Client Debit");
+    }
+
+    for (unsigned long long i = 0; i < count; ++i) {
+        ClientAccount clientAccount{};
+        // “%llu # %llu # %llu\n”
+        const int fields = std::scanf(
+            "%llu # %llu # %llu",
+            &clientAccount.clientId, &clientAccount.accountId, &clientAccount.depositId
+        );
+        if (fields != 3) {
+            throw std::runtime_error("Не удалось прочитать запись Client Debit");
+        }
+
+        if (!clientAccounts.add(clientAccount)) {
+            throw std::runtime_error("Таблица счетов клиентов Client Debit заполнена");
+        }
+    }
+}

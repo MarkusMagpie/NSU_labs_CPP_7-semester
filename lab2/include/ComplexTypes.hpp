@@ -30,3 +30,9 @@ struct Client {
     char name[100]; // Фамилия Имя Отчество / Название организации
     ClientType type; // Тип клиента
 };
+
+struct ClientAccount {
+    unsigned long long clientId; // Индивидуальный номер клиента
+    unsigned long long accountId; // Уникальный номер счета
+    unsigned long long depositId; // Уникальный номер вклада
+};

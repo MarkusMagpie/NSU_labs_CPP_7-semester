@@ -6,6 +6,7 @@
 #include <DepositTable.hpp>
 #include <CreditTable.hpp>
 #include <ClientTable.hpp>
+#include <ClientAccountTable.hpp>
 #include <InputReader.hpp>
 
 int main() {
@@ -21,6 +22,9 @@ int main() {
 
         ClientTable clients;
         readClients(clients);
+
+        ClientAccountTable clientAccounts;
+        readClientAccounts(clientAccounts);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "Ошибка чтения: %s\n", error.what());
         return EXIT_FAILURE;
