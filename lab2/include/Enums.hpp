@@ -26,12 +26,22 @@ enum class DepositType {
     AnnuallyMin
 };
 
+enum class CreditType {
+    Daily,
+    Monthly,
+    Quarterly,
+    SemiAnnually,
+    Annually
+};
+
 // строки входных данных -> перечисления
 AccountType parseAccountType(const char* text);
 Currency parseCurrency(const char* text);
 DepositType parseDepositType(const char* text);
+CreditType parseCreditType(const char* text);
 
 // перечисления -> строки
 const char* accountTypeToString(AccountType type);
 const char* currencyToString(Currency currency);
 const char* depositTypeToString(DepositType type);
+const char* creditTypeToString(CreditType type);

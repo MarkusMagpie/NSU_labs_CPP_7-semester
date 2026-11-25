@@ -90,3 +90,40 @@ void readDeposits(DepositTable& deposits) {
         }
     }
 }
+
+void readCredits(CreditTable& credits) {
+    if (credits.size() != 0) {
+        throw std::invalid_argument("Для чтения Credits требуется пустая таблица");
+    }
+
+    unsigned long long count = 0;
+    if (std::scanf(" Credits %llu", &count) != 1) {
+        throw std::runtime_error("Не удалось прочитать заголовок Credits");
+    }
+    if (count > CreditTable::capacity) {
+        throw std::runtime_error("Количество кредитов превышает вместимость таблицы Credits");
+    }
+
+    for (unsigned long long i = 0; i < count; ++i) {
+        Credit credit{};
+        unsigned long long whole = 0;
+        unsigned long long thousandths = 0;
+        char typeText[100]{};
+        // “%llu # %le # %llu.%llu # %99[a-zA-Z0-9/_ ]\n”
+        const int fields = std::scanf(
+            "%llu # %le # %llu.%llu # %99[a-zA-Z0-9/_ -]",
+            &credit.id, &credit.annualRate, &whole, &thousandths, typeText
+        );
+        if (fields != 5) {
+            throw std::runtime_error("Не удалось прочитать запись Credits");
+        }
+
+        trimTrailingSpaces(typeText);
+        credit.loanAmount = moneyFromParts(whole, thousandths);
+        credit.type = parseCreditType(typeText);
+        
+        if (!credits.add(credit)) {
+            throw std::runtime_error("Таблица кредитов Credits заполнена");
+        }
+    }
+}

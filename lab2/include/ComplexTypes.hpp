@@ -17,3 +17,10 @@ struct Deposit {
     Date creationDate; // Дата создания вклада
     unsigned long long termDays; // Полный срок вклада в днях
 };
+
+struct Credit {
+    unsigned long long id; // Уникальный номер кредита
+    double annualRate; // Процентная ставка (годовая) (пример: 6.32 = 6.32%)
+    Money loanAmount; // Сумма займа
+    CreditType type; // Тип кредита - периодичность начисления процентов
+};

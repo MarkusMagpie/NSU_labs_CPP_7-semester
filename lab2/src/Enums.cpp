@@ -36,6 +36,16 @@ DepositType parseDepositType(const char* text) {
     throw std::invalid_argument(std::string("Неизвестный тип вклада: ") + text);
 }
 
+CreditType parseCreditType(const char* text) {
+    if (std::strncmp(text, "Charged Daily", 100) == 0) return CreditType::Daily;
+    if (std::strncmp(text, "Charged Monthly", 100) == 0) return CreditType::Monthly;
+    if (std::strncmp(text, "Charged Quarterly", 100) == 0) return CreditType::Quarterly;
+    if (std::strncmp(text, "Charged Semi-annually", 100) == 0) return CreditType::SemiAnnually;
+    if (std::strncmp(text, "Charged Annually", 100) == 0) return CreditType::Annually;
+
+    throw std::invalid_argument(std::string("Неизвестный тип кредита: ") + text);
+}
+
 
 
 const char* accountTypeToString(AccountType type) {
@@ -74,4 +84,16 @@ const char* depositTypeToString(DepositType type) {
     }
 
     throw std::invalid_argument("Неизвестное значение типа вклада");
+}
+
+const char* creditTypeToString(CreditType type) {
+    switch (type) {
+        case CreditType::Daily: return "Charged Daily";
+        case CreditType::Monthly: return "Charged Monthly";
+        case CreditType::Quarterly: return "Charged Quarterly";
+        case CreditType::SemiAnnually: return "Charged Semi-annually";
+        case CreditType::Annually: return "Charged Annually";
+    }
+
+    throw std::invalid_argument("Неизвестное значение типа кредита");
 }
