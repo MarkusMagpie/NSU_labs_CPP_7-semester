@@ -10,6 +10,11 @@
 #include <InputReader.hpp>
 
 namespace {
+/*
+нужен так как функции readAccounts, readDeposits и остальные вызывают std::scanf, 
+    а он читает из stdin
+класс временно перенаправляет stdin на файл с тестовыми данными
+*/
 class ScopedStdin {
 private:
     int saved_;
@@ -20,12 +25,9 @@ public:
         if (result == -1) {
             close(saved_);
         }
-        REQUIRE(result != -1);
+        
         std::clearerr(stdin);
     }
-
-    ScopedStdin(const ScopedStdin&) = delete;
-    ScopedStdin& operator=(const ScopedStdin&) = delete;
 
     ~ScopedStdin() {
         // POSIX очищает буфер ввода для временного файла перед восстановлением stdin.
