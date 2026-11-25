@@ -4,6 +4,16 @@
 
 #include <Enums.hpp>
 
+ClientType parseClientType(const char* text) {
+    if (std::strncmp(text, "Individual Client", 100) == 0) return ClientType::IndividualClient;
+    if (std::strncmp(text, "Legal Entity", 100) == 0) return ClientType::LegalEntity;
+    if (std::strncmp(text, "VIP Individual Client", 100) == 0) return ClientType::VipIndividualClient;
+    if (std::strncmp(text, "VIP Legal Entity", 100) == 0) return ClientType::VipLegalEntity;
+    if (std::strncmp(text, "Not a Client", 100) == 0) return ClientType::NotAClient;
+
+    throw std::invalid_argument(std::string("Неизвестный тип клиента: ") + text);
+}
+
 AccountType parseAccountType(const char* text) {
     if (std::strncmp(text, "debit", 100) == 0) return AccountType::Debit;
     if (std::strncmp(text, "deposit", 100) == 0) return AccountType::Deposit;
@@ -96,4 +106,16 @@ const char* creditTypeToString(CreditType type) {
     }
 
     throw std::invalid_argument("Неизвестное значение типа кредита");
+}
+
+const char* clientTypeToString(ClientType type) {
+    switch (type) {
+        case ClientType::IndividualClient: return "Individual Client";
+        case ClientType::LegalEntity: return "Legal Entity";
+        case ClientType::VipIndividualClient: return "VIP Individual Client";
+        case ClientType::VipLegalEntity: return "VIP Legal Entity";
+        case ClientType::NotAClient: return "Not a Client";
+    }
+
+    throw std::invalid_argument("Неизвестное значение типа клиента");
 }

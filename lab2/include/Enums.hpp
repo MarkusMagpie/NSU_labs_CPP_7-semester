@@ -34,14 +34,24 @@ enum class CreditType {
     Annually
 };
 
+enum class ClientType {
+    IndividualClient,
+    LegalEntity,
+    VipIndividualClient,
+    VipLegalEntity,
+    NotAClient
+};
+
 // строки входных данных -> перечисления
 AccountType parseAccountType(const char* text);
 Currency parseCurrency(const char* text);
 DepositType parseDepositType(const char* text);
 CreditType parseCreditType(const char* text);
+ClientType parseClientType(const char* text);
 
 // перечисления -> строки
 const char* accountTypeToString(AccountType type);
 const char* currencyToString(Currency currency);
 const char* depositTypeToString(DepositType type);
 const char* creditTypeToString(CreditType type);
+const char* clientTypeToString(ClientType type);

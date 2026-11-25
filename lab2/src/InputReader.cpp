@@ -121,9 +121,44 @@ void readCredits(CreditTable& credits) {
         trimTrailingSpaces(typeText);
         credit.loanAmount = moneyFromParts(whole, thousandths);
         credit.type = parseCreditType(typeText);
-        
+
         if (!credits.add(credit)) {
             throw std::runtime_error("Таблица кредитов Credits заполнена");
+        }
+    }
+}
+
+void readClients(ClientTable& clients) {
+    if (clients.size() != 0) {
+        throw std::invalid_argument("Для чтения Clients требуется пустая таблица");
+    }
+
+    unsigned long long count = 0;
+    if (std::scanf(" Clients %llu", &count) != 1) {
+        throw std::runtime_error("Не удалось прочитать заголовок Clients");
+    }
+    if (count > ClientTable::capacity) {
+        throw std::runtime_error("Количество клиентов превышает вместимость таблицы Clients");
+    }
+
+    for (unsigned long long i = 0; i < count; ++i) {
+        Client client{};
+        char typeText[100]{};
+        // “%llu # %99[a-zA-Z0-9/_ ] # %99[a-zA-Z0-9/_ ]\n”
+        const int fields = std::scanf(
+            "%llu # %99[a-zA-Z0-9/_ ] # %99[a-zA-Z0-9/_ ]",
+            &client.id, client.name, typeText
+        );
+        if (fields != 3) {
+            throw std::runtime_error("Не удалось прочитать запись Clients");
+        }
+
+        trimTrailingSpaces(client.name);
+        trimTrailingSpaces(typeText);
+        client.type = parseClientType(typeText);
+        
+        if (!clients.add(client)) {
+            throw std::runtime_error("Таблица клиентов Clients заполнена");
         }
     }
 }

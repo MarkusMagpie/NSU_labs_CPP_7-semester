@@ -24,3 +24,9 @@ struct Credit {
     Money loanAmount; // Сумма займа
     CreditType type; // Тип кредита - периодичность начисления процентов
 };
+
+struct Client {
+    unsigned long long id; // Индивидуальный номер клиента
+    char name[100]; // Фамилия Имя Отчество / Название организации
+    ClientType type; // Тип клиента
+};

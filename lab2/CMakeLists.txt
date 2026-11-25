@@ -17,6 +17,7 @@ set(SOURCES
     src/AccountTable.cpp
     src/DepositTable.cpp
     src/CreditTable.cpp
+    src/ClientTable.cpp
     src/InputReader.cpp
     src/Enums.cpp
 )
