@@ -217,3 +217,101 @@ void readBankAccounts(BankAccountTable& bankAccounts) {
         }
     }
 }
+
+void readClientCredits(ClientCreditTable& clientCredits) {
+    if (clientCredits.size() != 0) {
+        throw std::invalid_argument("Для чтения Client Credit требуется пустая таблица");
+    }
+
+    unsigned long long count = 0;
+    if (std::scanf(" Client Credit %llu", &count) != 1) {
+        throw std::runtime_error("Не удалось прочитать заголовок Client Credit");
+    }
+    if (count > ClientCreditTable::capacity) {
+        throw std::runtime_error("Количество долговых обязательств превышает вместимость таблицы Client Credit");
+    }
+
+    for (unsigned long long i = 0; i < count; ++i) {
+        ClientCredit clientCredit{};
+        const int fields = std::scanf(
+            "%llu # %llu # %llu",
+            &clientCredit.clientId, &clientCredit.accountId, &clientCredit.creditId
+        );
+        if (fields != 3) {
+            throw std::runtime_error("Не удалось прочитать запись Client Credit");
+        }
+
+        if (!clientCredits.add(clientCredit)) {
+            throw std::runtime_error("Таблица долговых обязательств Client Credit заполнена");
+        }
+    }
+}
+
+void readWorkPlaces(WorkPlaceTable& workPlaces) {
+    if (workPlaces.size() != 0) {
+        throw std::invalid_argument("Для чтения Work Places требуется пустая таблица");
+    }
+
+    unsigned long long count = 0;
+    if (std::scanf(" Work Places %llu", &count) != 1) {
+        throw std::runtime_error("Не удалось прочитать заголовок Work Places");
+    }
+    if (count > WorkPlaceTable::capacity) {
+        throw std::runtime_error("Количество записей превышает вместимость таблицы Work Places");
+    }
+
+    for (unsigned long long i = 0; i < count; ++i) {
+        WorkPlace workPlace{};
+        char typeText[100]{};
+        const int fields = std::scanf(
+            " %99[a-zA-Z0-9/_ ] # %llu", 
+            typeText, &workPlace.count
+        );
+        if (fields != 2) {
+            throw std::runtime_error("Не удалось прочитать запись Work Places");
+        }
+
+        trimTrailingSpaces(typeText);
+        workPlace.type = parseWorkPlaceType(typeText);
+
+        if (!workPlaces.add(workPlace)) {
+            throw std::runtime_error("Таблица рабочих мест Work Places заполнена");
+        }
+    }
+}
+
+void readExchangeRates(ExchangeRateTable& exchangeRates) {
+    if (exchangeRates.size() != 0) {
+        throw std::invalid_argument("Для чтения Exchange Rates требуется пустая таблица");
+    }
+
+    unsigned long long count = 0;
+    if (std::scanf(" Exchange Rates %llu", &count) != 1) {
+        throw std::runtime_error("Не удалось прочитать заголовок Exchange Rates");
+    }
+    if (count > ExchangeRateTable::capacity) {
+        throw std::runtime_error("Количество курсов превышает вместимость таблицы Exchange Rates");
+    }
+
+    for (unsigned long long i = 0; i < count; ++i) {
+        ExchangeRate exchangeRate{};
+        char soldCurrencyText[100]{};
+        char boughtCurrencyText[100]{};
+        const int fields = std::scanf(
+            " %99[a-zA-Z0-9/_ ] # %99[a-zA-Z0-9/_ ] # %le",
+            soldCurrencyText, boughtCurrencyText, &exchangeRate.rate
+        );
+        if (fields != 3) {
+            throw std::runtime_error("Не удалось прочитать запись Exchange Rates");
+        }
+
+        trimTrailingSpaces(soldCurrencyText);
+        trimTrailingSpaces(boughtCurrencyText);
+        exchangeRate.soldCurrency = parseCurrency(soldCurrencyText);
+        exchangeRate.boughtCurrency = parseCurrency(boughtCurrencyText);
+
+        if (!exchangeRates.add(exchangeRate)) {
+            throw std::runtime_error("Таблица курсов Exchange Rates заполнена");
+        }
+    }
+}

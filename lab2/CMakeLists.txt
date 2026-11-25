@@ -9,8 +9,7 @@ option(WITH_TESTS "Build unit tests (downloads Catch2 if not present)" OFF)
 message(STATUS "source directory: ${CMAKE_SOURCE_DIR}")
 message(STATUS "WITH_TESTS: ${WITH_TESTS}")
 
-set(SOURCES
-    src/main.cpp 
+add_library(bank_core STATIC
     src/BankRounding.cpp 
     src/DateTime.cpp 
     src/Money.cpp
@@ -22,13 +21,13 @@ set(SOURCES
     src/Enums.cpp
 )
 
-# консольное приложение моделирования банка
-add_executable(bank 
-    ${SOURCES}
-)
-target_include_directories(bank PRIVATE 
+target_include_directories(bank_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+# консольное приложение моделирования банка
+add_executable(bank src/main.cpp)
+target_link_libraries(bank PRIVATE bank_core)
 
 if(WITH_TESTS)
     # cmake переменная WITH_TESTS превращается в shell переменную

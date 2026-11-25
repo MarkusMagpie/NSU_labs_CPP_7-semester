@@ -40,3 +40,20 @@ struct ClientAccount {
 struct BankAccount {
     unsigned long long accountId; // Уникальный номер счета банка
 };
+
+struct ClientCredit {
+    unsigned long long clientId; // Индивидуальный номер клиента
+    unsigned long long accountId; // Уникальный номер счета
+    unsigned long long creditId; // Уникальный номер кредита
+};
+
+struct WorkPlace {
+    WorkPlaceType type; // Тип рабочего места
+    unsigned long long count; // Количество мест в филиале
+};
+
+struct ExchangeRate {
+    Currency soldCurrency; // Продаваемая клиентом валюта
+    Currency boughtCurrency; // Покупаемая клиентом валюта
+    double rate; // Коэффициент обмена - отношение покупаемой валюты к продаваемой
+};

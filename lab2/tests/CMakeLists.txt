@@ -1,9 +1,9 @@
 # https://github.com/catchorg/Catch2/blob/devel/docs/cmake-integration.md#usage
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/Catch2 ${CMAKE_BINARY_DIR}/catch2_build)
 
-add_executable(unit_tests unit_tests.cpp ${CMAKE_SOURCE_DIR}/src/BankRounding.cpp)
-target_include_directories(unit_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(unit_tests PRIVATE 
+add_executable(unit_tests unit_tests.cpp input_reader_test.cpp)
+target_link_libraries(unit_tests PRIVATE
+    bank_core
     Catch2::Catch2WithMain
 )
 

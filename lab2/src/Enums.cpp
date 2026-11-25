@@ -56,7 +56,14 @@ CreditType parseCreditType(const char* text) {
     throw std::invalid_argument(std::string("Неизвестный тип кредита: ") + text);
 }
 
+WorkPlaceType parseWorkPlaceType(const char* text) {
+    if (std::strncmp(text, "Client Manager", 100) == 0) return WorkPlaceType::ClientManager;
+    if (std::strncmp(text, "Cash Desk", 100) == 0) return WorkPlaceType::CashDesk;
+    if (std::strncmp(text, "Currency Exchange", 100) == 0) return WorkPlaceType::CurrencyExchange;
+    if (std::strncmp(text, "VIP Client Manager", 100) == 0) return WorkPlaceType::VipClientManager;
 
+    throw std::invalid_argument(std::string("Неизвестный тип рабочего места: ") + text);
+}
 
 const char* accountTypeToString(AccountType type) {
     switch (type) {
@@ -118,4 +125,15 @@ const char* clientTypeToString(ClientType type) {
     }
 
     throw std::invalid_argument("Неизвестное значение типа клиента");
+}
+
+const char* workPlaceTypeToString(WorkPlaceType type) {
+    switch (type) {
+        case WorkPlaceType::ClientManager: return "Client Manager";
+        case WorkPlaceType::CashDesk: return "Cash Desk";
+        case WorkPlaceType::CurrencyExchange: return "Currency Exchange";
+        case WorkPlaceType::VipClientManager: return "VIP Client Manager";
+    }
+
+    throw std::invalid_argument("Неизвестное значение типа рабочего места");
 }

@@ -6,6 +6,9 @@
 #include <ClientTable.hpp>
 #include <ClientAccountTable.hpp>
 #include <BankAccountTable.hpp>
+#include <ClientCreditTable.hpp>
+#include <WorkPlaceTable.hpp>
+#include <ExchangeRateTable.hpp>
 
 // чтение таблиц из stdin в пустые таблицы
 void readAccounts(AccountTable& accounts);
@@ -14,3 +17,6 @@ void readCredits(CreditTable& credits);
 void readClients(ClientTable& clients);
 void readClientAccounts(ClientAccountTable& clientAccounts);
 void readBankAccounts(BankAccountTable& bankAccounts);
+void readClientCredits(ClientCreditTable& clientCredits);
+void readWorkPlaces(WorkPlaceTable& workPlaces);
+void readExchangeRates(ExchangeRateTable& exchangeRates);
