@@ -22,7 +22,7 @@ void readAccounts(AccountTable& accounts) {
     }
 
     unsigned long long count = 0;
-    if (std::scanf("Accounts %llu", &count) != 1) {
+    if (std::scanf(" Accounts %llu", &count) != 1) {
         throw std::runtime_error("Не удалось прочитать заголовок Accounts");
     }
     if (count > AccountTable::capacity) {
@@ -65,7 +65,7 @@ void readDeposits(DepositTable& deposits) {
 
     unsigned long long count = 0;
     if (std::scanf(" Debits %llu", &count) != 1) {
-        throw std::runtime_error("Не удалось прочитать заголовок Deposits");
+        throw std::runtime_error("Не удалось прочитать заголовок Debits"); // вообще Deposits, не Debits
     }
     if (count > DepositTable::capacity) {
         throw std::runtime_error("Количество вкладов превышает вместимость таблицы Deposits");
@@ -189,6 +189,31 @@ void readClientAccounts(ClientAccountTable& clientAccounts) {
 
         if (!clientAccounts.add(clientAccount)) {
             throw std::runtime_error("Таблица счетов клиентов Client Debit заполнена");
+        }
+    }
+}
+
+void readBankAccounts(BankAccountTable& bankAccounts) {
+    if (bankAccounts.size() != 0) {
+        throw std::invalid_argument("Для чтения Bank Accounts требуется пустая таблица");
+    }
+
+    unsigned long long count = 0;
+    if (std::scanf(" Bank Accounts %llu", &count) != 1) {
+        throw std::runtime_error("Не удалось прочитать заголовок Bank Accounts");
+    }
+    if (count > BankAccountTable::capacity) {
+        throw std::runtime_error("Количество счетов банка превышает вместимость таблицы Bank Accounts");
+    }
+
+    for (unsigned long long i = 0; i < count; ++i) {
+        BankAccount bankAccount{};
+        if (std::scanf("%llu", &bankAccount.accountId) != 1) {
+            throw std::runtime_error("Не удалось прочитать запись Bank Accounts");
+        }
+
+        if (!bankAccounts.add(bankAccount)) {
+            throw std::runtime_error("Таблица счетов банка Bank Accounts заполнена");
         }
     }
 }

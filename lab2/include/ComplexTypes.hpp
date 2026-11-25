@@ -36,3 +36,7 @@ struct ClientAccount {
     unsigned long long accountId; // Уникальный номер счета
     unsigned long long depositId; // Уникальный номер вклада
 };
+
+struct BankAccount {
+    unsigned long long accountId; // Уникальный номер счета банка
+};
