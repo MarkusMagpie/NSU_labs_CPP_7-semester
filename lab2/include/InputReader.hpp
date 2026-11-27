@@ -9,6 +9,7 @@
 #include <ClientCreditTable.hpp>
 #include <WorkPlaceTable.hpp>
 #include <ExchangeRateTable.hpp>
+#include <Event.hpp>
 
 // чтение таблиц из stdin в пустые таблицы
 void readAccounts(AccountTable& accounts);
@@ -20,3 +21,6 @@ void readBankAccounts(BankAccountTable& bankAccounts);
 void readClientCredits(ClientCreditTable& clientCredits);
 void readWorkPlaces(WorkPlaceTable& workPlaces);
 void readExchangeRates(ExchangeRateTable& exchangeRates);
+
+// чтение следующего известного события
+bool readEvent(Event& event);

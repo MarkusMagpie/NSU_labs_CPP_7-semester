@@ -315,3 +315,47 @@ void readExchangeRates(ExchangeRateTable& exchangeRates) {
         }
     }
 }
+
+bool readEvent(Event& event) {
+    char line[1024]{};
+    while (std::scanf(" %1023[^\n]", line) == 1) {
+        std::scanf("%*[^\n]");
+        if (std::strlen(line) == sizeof(line) - 1) {
+            continue;
+        }
+
+        Event candidate{};
+        int nameOffset = 0;
+        // например: 1 # 10:30 # Start of Bank Day
+        const int fields = std::sscanf(
+            line, // отсюда читаю 
+            "%llu # %llu:%llu # %n",
+            &candidate.timestamp.date, 
+            &candidate.timestamp.time.hour,
+            &candidate.timestamp.time.minute, 
+            &nameOffset
+        );
+        if (fields != 3 || nameOffset == 0) {
+            continue;
+        }
+
+        char* event_name = line + nameOffset;
+        trimTrailingSpaces(event_name);
+        if (std::strncmp(event_name, "Start of Bank Day", 100) == 0) {
+            candidate.type = EventType::StartOfBankDay;
+            event = candidate;
+            return true;
+        }
+        if (std::strncmp(event_name, "End of Bank Day", 100) == 0) {
+            candidate.type = EventType::EndOfBankDay;
+            event = candidate;
+            return true;
+        }
+    }
+
+    if (std::ferror(stdin)) {
+        throw std::runtime_error("Ошибка чтения событий");
+    }
+
+    return false;
+}

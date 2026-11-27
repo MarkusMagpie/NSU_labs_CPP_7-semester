@@ -2,47 +2,37 @@
 #include <cstdlib>
 #include <exception>
 
-#include <AccountTable.hpp>
-#include <DepositTable.hpp>
-#include <CreditTable.hpp>
-#include <ClientTable.hpp>
-#include <ClientAccountTable.hpp>
-#include <BankAccountTable.hpp>
-#include <ClientCreditTable.hpp>
-#include <WorkPlaceTable.hpp>
-#include <ExchangeRateTable.hpp>
+#include <BankState.hpp>
+#include <EventProcessor.hpp>
 #include <InputReader.hpp>
 
 int main() {
     try {
         /* --- Чтение всех начальных таблиц из stdin --- */
-        AccountTable accounts;
-        readAccounts(accounts);
+        BankState bank;
+        readAccounts(bank.accounts);
 
-        DepositTable deposits;
-        readDeposits(deposits);
+        readDeposits(bank.deposits);
 
-        CreditTable credits;
-        readCredits(credits);
+        readCredits(bank.credits);
 
-        ClientTable clients;
-        readClients(clients);
+        readClients(bank.clients);
 
-        ClientAccountTable clientAccounts;
-        readClientAccounts(clientAccounts);
+        readClientAccounts(bank.clientAccounts);
 
-        BankAccountTable bankAccounts;
-        readBankAccounts(bankAccounts);
+        readBankAccounts(bank.bankAccounts);
 
-        ClientCreditTable clientCredits;
-        readClientCredits(clientCredits);
+        readClientCredits(bank.clientCredits);
 
-        WorkPlaceTable workPlaces;
-        readWorkPlaces(workPlaces);
+        readWorkPlaces(bank.workPlaces);
 
-        ExchangeRateTable exchangeRates;
-        readExchangeRates(exchangeRates);
+        readExchangeRates(bank.exchangeRates);
         /* --------------------------------------------- */
+
+        Event event{};
+        while (readEvent(event)) {
+            processEvent(bank, event);
+        }
     } catch (const std::exception& error) {
         std::fprintf(stderr, "Ошибка чтения: %s\n", error.what());
         return EXIT_FAILURE;
