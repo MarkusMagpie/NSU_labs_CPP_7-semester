@@ -21,13 +21,14 @@ void processEvent(BankState& bank, const Event& event) {
             return;
 
         case EventType::EndOfBankDay:
+            // Независимо от времени прихода данного события банковский день заканчивается в 19:00. 
             bank.bankDayEnd = DateTime{
                 event.timestamp.date,
                 Time{19, 0}
             };
             bank.bankDayEnded = true;
 
-            // начисления, статистика и завершение обслуживания пока не реализованы
+            // начисления процентов, статистика и завершение обслуживания пока не реализованы
             return;
     }
 
