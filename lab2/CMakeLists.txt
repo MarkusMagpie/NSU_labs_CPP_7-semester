@@ -20,6 +20,7 @@ add_library(bank_core STATIC
     src/InputReader.cpp
     src/EventProcessor.cpp
     src/BankLookup.cpp
+    src/Transfer.cpp
     src/Enums.cpp
 )
 
